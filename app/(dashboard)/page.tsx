@@ -1,0 +1,56 @@
+'use client'
+
+import { StatsCard } from '@/components/dashboard/stats-card'
+import { QuickActions } from '@/components/dashboard/quick-actions'
+import { RecentActivityCard } from '@/components/dashboard/recent-activity-card'
+import { useStats, useActivity } from '@/hooks/use-data'
+import { BarChart3, CheckCircle, Zap, TrendingUp, Loader2 } from 'lucide-react'
+
+export default function Home() {
+  const { stats, isLoading } = useStats()
+  const { activities } = useActivity()
+
+  return (
+    <div className="p-4 md:p-8">
+      <div className="max-w-7xl mx-auto space-y-8">
+        <div>
+          <h1 className="text-3xl font-bold text-foreground">Dashboard</h1>
+          <p className="text-muted-foreground mt-2">Welcome back to your video studio</p>
+        </div>
+
+        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
+          <StatsCard
+            label="Pending Videos"
+            value={isLoading ? '-' : stats?.pending || 0}
+            icon={<BarChart3 size={24} />}
+            variant="pending"
+          />
+          <StatsCard
+            label="Approved Videos"
+            value={isLoading ? '-' : stats?.approved || 0}
+            icon={<CheckCircle size={24} />}
+            variant="approved"
+          />
+          <StatsCard
+            label="Posted Today"
+            value={isLoading ? '-' : stats?.postedToday || 0}
+            icon={<Zap size={24} />}
+            variant="posted"
+          />
+          <StatsCard
+            label="Total Posted"
+            value={isLoading ? '-' : stats?.totalPosted || 0}
+            icon={<TrendingUp size={24} />}
+          />
+        </div>
+
+        <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
+          <div className="lg:col-span-2">
+            <QuickActions />
+          </div>
+          <RecentActivityCard activities={activities} />
+        </div>
+      </div>
+    </div>
+  )
+}

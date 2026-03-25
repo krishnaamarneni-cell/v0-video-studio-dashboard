@@ -2,11 +2,11 @@ import { Badge } from '@/components/ui/badge'
 import { StatusType } from '@/lib/types'
 
 interface StatusBadgeProps {
-  status: StatusType
+  status?: StatusType | string
 }
 
-export function StatusBadge({ status }: StatusBadgeProps) {
-  const variants = {
+export function StatusBadge({ status = 'pending' }: StatusBadgeProps) {
+  const variants: Record<string, { label: string; className: string }> = {
     pending: { label: 'Pending', className: 'bg-yellow-400/20 text-yellow-200 border-yellow-400/30' },
     approved: { label: 'Approved', className: 'bg-blue-500/20 text-blue-200 border-blue-500/30' },
     posted: { label: 'Posted', className: 'bg-green-500/20 text-green-200 border-green-500/30' },
@@ -14,7 +14,8 @@ export function StatusBadge({ status }: StatusBadgeProps) {
     ready: { label: 'Ready', className: 'bg-purple-500/20 text-purple-200 border-purple-500/30' },
   }
 
-  const { label, className } = variants[status]
+  const variant = variants[status as string] || variants.pending
+  const { label, className } = variant
 
   return (
     <Badge variant="outline" className={className}>

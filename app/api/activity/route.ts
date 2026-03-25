@@ -25,7 +25,16 @@ export async function GET(request: Request) {
 
     if (error) throw error
 
-    return NextResponse.json(data || [])
+    // Normalize the data structure to match ActivityItem type
+    const normalized = (data || []).map((item: any) => ({
+      id: item.id,
+      title: item.title,
+      status: item.status || 'posted',
+      timestamp: item.created_at || new Date().toISOString(),
+      platform: item.platform,
+    }))
+
+    return NextResponse.json(normalized)
   } catch (error) {
     console.error('Activity API error:', error)
     return NextResponse.json(

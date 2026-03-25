@@ -5,14 +5,9 @@ import { usePathname } from 'next/navigation'
 import { Menu, X, Home, ListTodo, Settings, History } from 'lucide-react'
 import { useState, useEffect } from 'react'
 
-export function Sidebar() {
+function SidebarContent() {
   const pathname = usePathname()
   const [isOpen, setIsOpen] = useState(false)
-  const [mounted, setMounted] = useState(false)
-
-  useEffect(() => {
-    setMounted(true)
-  }, [])
 
   const links = [
     { href: '/', label: 'Dashboard', icon: Home },
@@ -21,10 +16,12 @@ export function Sidebar() {
     { href: '/history', label: 'History', icon: History },
   ]
 
-  const isActive = (href: string) => pathname === href
-
-  if (!mounted) {
-    return null
+  const isActive = (href: string) => {
+    // Handle root path specially
+    if (href === '/') {
+      return pathname === '/' || pathname === '/dashboard'
+    }
+    return pathname?.startsWith(href)
   }
 
   return (
@@ -82,4 +79,20 @@ export function Sidebar() {
       )}
     </>
   )
+}
+
+export function Sidebar() {
+  const [mounted, setMounted] = useState(false)
+
+  useEffect(() => {
+    setMounted(true)
+  }, [])
+
+  if (!mounted) {
+    return (
+      <aside className="fixed md:relative top-0 left-0 h-screen bg-sidebar border-r border-sidebar-border w-64 hidden md:block" />
+    )
+  }
+
+  return <SidebarContent />
 }
