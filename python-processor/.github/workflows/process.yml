@@ -1,0 +1,95 @@
+# GitHub Actions Workflow for Video Studio
+# Runs as fallback when laptop is off
+# Scheduled to run every hour
+
+name: Video Processor
+
+on:
+  schedule:
+    # Run every hour
+    - cron: '0 * * * *'
+  
+  # Manual trigger
+  workflow_dispatch:
+
+jobs:
+  process:
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+      
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+          cache: 'pip'
+      
+      - name: Install FFmpeg
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y ffmpeg
+      
+      - name: Install dependencies
+        run: |
+          pip install --upgrade pip
+          pip install -r requirements.txt
+      
+      - name: Create directories
+        run: |
+          mkdir -p output temp
+      
+      - name: Set up credentials
+        run: |
+          # YouTube credentials from secret
+          echo '${{ secrets.YOUTUBE_CREDENTIALS }}' > client_secrets.json
+          
+          # Token if exists
+          if [ -n "${{ secrets.YOUTUBE_TOKEN }}" ]; then
+            echo '${{ secrets.YOUTUBE_TOKEN }}' > token.pickle
+          fi
+      
+      - name: Run processor (once)
+        env:
+          SUPABASE_URL: ${{ secrets.SUPABASE_URL }}
+          SUPABASE_SERVICE_KEY: ${{ secrets.SUPABASE_SERVICE_KEY }}
+          GROQ_API_KEY: ${{ secrets.GROQ_API_KEY }}
+          TWITTER_API_KEY: ${{ secrets.TWITTER_API_KEY }}
+          TWITTER_API_SECRET: ${{ secrets.TWITTER_API_SECRET }}
+          TWITTER_ACCESS_TOKEN: ${{ secrets.TWITTER_ACCESS_TOKEN }}
+          TWITTER_ACCESS_SECRET: ${{ secrets.TWITTER_ACCESS_SECRET }}
+        run: |
+          cd scripts
+          python processor.py --once
+      
+      - name: Clean up
+        if: always()
+        run: |
+          rm -rf temp/*
+          rm -f client_secrets.json token.pickle
+
+# ============================================
+# SETUP INSTRUCTIONS
+# ============================================
+# 
+# Add these secrets to your GitHub repo:
+# Settings → Secrets and variables → Actions → New repository secret
+#
+# Required:
+# - SUPABASE_URL: Your Supabase project URL
+# - SUPABASE_SERVICE_KEY: Your Supabase service role key
+# - GROQ_API_KEY: Your Groq API key
+#
+# For YouTube posting:
+# - YOUTUBE_CREDENTIALS: Contents of client_secrets.json
+# - YOUTUBE_TOKEN: Contents of token.pickle (base64 encoded)
+#
+# For Twitter posting:
+# - TWITTER_API_KEY
+# - TWITTER_API_SECRET
+# - TWITTER_ACCESS_TOKEN
+# - TWITTER_ACCESS_SECRET
+#
+# ============================================
