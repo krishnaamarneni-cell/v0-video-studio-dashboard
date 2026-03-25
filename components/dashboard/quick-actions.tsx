@@ -48,7 +48,8 @@ export function QuickActions() {
       console.log('[v0] Response data:', data)
 
       if (!response.ok) {
-        throw new Error(data.error || 'Failed to process video')
+        console.error('[v0] API error details:', { status: response.status, error: data.error, fullData: data })
+        throw new Error(data.error || `Failed to process video (${response.status})`)
       }
 
       console.log('[v0] Video added successfully:', data)
