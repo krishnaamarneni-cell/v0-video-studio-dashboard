@@ -1,6 +1,6 @@
 import { ActivityItem } from '@/lib/types'
 import { StatusBadge } from './status-badge'
-import { format } from 'date-fns'
+import { formatSafeDate } from '@/lib/format-date'
 
 interface ActivityItemProps {
   item: ActivityItem
@@ -12,7 +12,7 @@ export function ActivityItemComponent({ item }: ActivityItemProps) {
       <div className="flex-1">
         <p className="text-sm font-medium text-card-foreground">{item.title}</p>
         <p className="text-xs text-muted-foreground">
-          {format(item.timestamp, 'MMM dd, HH:mm')}
+          {formatSafeDate(item.timestamp, 'MMM dd, HH:mm')}
         </p>
       </div>
       <StatusBadge status={item.status} />

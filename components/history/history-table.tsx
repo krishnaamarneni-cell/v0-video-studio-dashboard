@@ -1,7 +1,7 @@
 import { Video } from '@/lib/types'
 import { StatusBadge } from '@/components/dashboard/status-badge'
 import { PlatformIcon } from './platform-icon'
-import { format } from 'date-fns'
+import { formatSafeDate } from '@/lib/format-date'
 import { ExternalLink } from 'lucide-react'
 
 interface HistoryTableProps {
@@ -44,7 +44,7 @@ export function HistoryTable({ videos }: HistoryTableProps) {
                 className="border-b border-border hover:bg-card/50 transition-colors"
               >
                 <td className="py-3 px-4 text-sm text-card-foreground">
-                  {video.postedAt && format(video.postedAt, 'MMM dd, yyyy')}
+                  {formatSafeDate(video.postedAt, 'MMM dd, yyyy')}
                 </td>
                 <td className="py-3 px-4 text-sm text-card-foreground line-clamp-1">
                   {video.title}

@@ -3,11 +3,16 @@
 import Link from 'next/link'
 import { usePathname } from 'next/navigation'
 import { Menu, X, Home, ListTodo, Settings, History } from 'lucide-react'
-import { useState } from 'react'
+import { useState, useEffect } from 'react'
 
 export function Sidebar() {
   const pathname = usePathname()
   const [isOpen, setIsOpen] = useState(false)
+  const [mounted, setMounted] = useState(false)
+
+  useEffect(() => {
+    setMounted(true)
+  }, [])
 
   const links = [
     { href: '/', label: 'Dashboard', icon: Home },
@@ -17,6 +22,10 @@ export function Sidebar() {
   ]
 
   const isActive = (href: string) => pathname === href
+
+  if (!mounted) {
+    return null
+  }
 
   return (
     <>

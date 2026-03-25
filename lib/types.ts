@@ -8,8 +8,8 @@ export interface Video {
   source: string
   duration: string
   status: StatusType
-  createdAt: Date
-  postedAt?: Date
+  createdAt: Date | string
+  postedAt?: Date | string
   views?: number
   url?: string
   platform?: Platform
@@ -33,6 +33,6 @@ export interface ActivityItem {
   id: string
   title: string
   status: StatusType
-  timestamp: Date
+  timestamp: Date | string
   platform?: Platform
 }
