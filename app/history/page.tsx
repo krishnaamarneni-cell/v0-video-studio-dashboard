@@ -4,11 +4,13 @@ import { useState } from 'react'
 import { Sidebar } from '@/components/layout/sidebar'
 import { DateFilter } from '@/components/history/date-filter'
 import { HistoryTable } from '@/components/history/history-table'
-import { mockVideos } from '@/lib/constants'
+import { useActivity } from '@/hooks/use-data'
 import { Card } from '@/components/ui/card'
+import { Loader2 } from 'lucide-react'
 
 export default function HistoryPage() {
-  const [dateFilter, setDateFilter] = useState<string>('7d')
+  const [dateRange, setDateRange] = useState<{ from?: string; to?: string }>({})
+  const { activities, isLoading } = useActivity(dateRange.from, dateRange.to)
 
   return (
     <div className="flex min-h-screen bg-background">
@@ -20,10 +22,16 @@ export default function HistoryPage() {
             <p className="text-muted-foreground mt-2">View your posting history and performance</p>
           </div>
 
-          <DateFilter onFilterChange={setDateFilter} />
+          <DateFilter onFilterChange={setDateRange} />
 
           <Card className="overflow-hidden">
-            <HistoryTable videos={mockVideos} />
+            {isLoading ? (
+              <div className="flex items-center justify-center py-12">
+                <Loader2 size={32} className="animate-spin text-primary" />
+              </div>
+            ) : (
+              <HistoryTable videos={activities} />
+            )}
           </Card>
         </div>
       </main>

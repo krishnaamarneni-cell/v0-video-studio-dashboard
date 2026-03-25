@@ -5,15 +5,13 @@ import { Sidebar } from '@/components/layout/sidebar'
 import { FilterTabs } from '@/components/queue/filter-tabs'
 import { VideoCard } from '@/components/queue/video-card'
 import { EmptyState } from '@/components/queue/empty-state'
-import { mockVideos } from '@/lib/constants'
+import { useQueue } from '@/hooks/use-data'
 import { StatusType } from '@/lib/types'
+import { Loader2 } from 'lucide-react'
 
 export default function QueuePage() {
   const [filter, setFilter] = useState<StatusType | 'all'>('all')
-
-  const filteredVideos = mockVideos.filter(
-    (video) => filter === 'all' || video.status === filter
-  )
+  const { videos, isLoading } = useQueue(filter)
 
   return (
     <div className="flex min-h-screen bg-background">
@@ -27,9 +25,13 @@ export default function QueuePage() {
 
           <FilterTabs onFilterChange={setFilter} />
 
-          {filteredVideos.length > 0 ? (
+          {isLoading ? (
+            <div className="flex items-center justify-center py-12">
+              <Loader2 size={32} className="animate-spin text-primary" />
+            </div>
+          ) : videos.length > 0 ? (
             <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
-              {filteredVideos.map((video) => (
+              {videos.map((video) => (
                 <VideoCard key={video.id} video={video} />
               ))}
             </div>

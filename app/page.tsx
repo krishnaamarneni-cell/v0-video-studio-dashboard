@@ -4,10 +4,13 @@ import { Sidebar } from '@/components/layout/sidebar'
 import { StatsCard } from '@/components/dashboard/stats-card'
 import { QuickActions } from '@/components/dashboard/quick-actions'
 import { RecentActivityCard } from '@/components/dashboard/recent-activity-card'
-import { mockStats } from '@/lib/constants'
-import { BarChart3, CheckCircle, Zap, TrendingUp } from 'lucide-react'
+import { useStats, useActivity } from '@/hooks/use-data'
+import { BarChart3, CheckCircle, Zap, TrendingUp, Loader2 } from 'lucide-react'
 
 export default function Home() {
+  const { stats, isLoading } = useStats()
+  const { activities } = useActivity()
+
   return (
     <div className="flex min-h-screen bg-background">
       <Sidebar />
@@ -21,25 +24,25 @@ export default function Home() {
           <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
             <StatsCard
               label="Pending Videos"
-              value={mockStats.pending}
+              value={isLoading ? '-' : stats?.pending || 0}
               icon={<BarChart3 size={24} />}
               variant="pending"
             />
             <StatsCard
               label="Approved Videos"
-              value={mockStats.approved}
+              value={isLoading ? '-' : stats?.approved || 0}
               icon={<CheckCircle size={24} />}
               variant="approved"
             />
             <StatsCard
               label="Posted Today"
-              value={mockStats.postedToday}
+              value={isLoading ? '-' : stats?.postedToday || 0}
               icon={<Zap size={24} />}
               variant="posted"
             />
             <StatsCard
               label="Total Posted"
-              value={mockStats.totalPosted}
+              value={isLoading ? '-' : stats?.totalPosted || 0}
               icon={<TrendingUp size={24} />}
             />
           </div>
@@ -48,7 +51,7 @@ export default function Home() {
             <div className="lg:col-span-2">
               <QuickActions />
             </div>
-            <RecentActivityCard />
+            <RecentActivityCard activities={activities} />
           </div>
         </div>
       </main>
