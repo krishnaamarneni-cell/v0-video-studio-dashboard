@@ -1,44 +1,32 @@
-import type { Metadata } from 'next'
-import { Geist, Geist_Mono } from 'next/font/google'
-import { Analytics } from '@vercel/analytics/next'
-import './globals.css'
+// app/layout.tsx
+// Root layout with sidebar navigation
 
-const _geist = Geist({ subsets: ["latin"] });
-const _geistMono = Geist_Mono({ subsets: ["latin"] });
+import type { Metadata } from 'next'
+import { Inter } from 'next/font/google'
+import './globals.css'
+import { Sidebar } from '@/components/sidebar'
+
+const inter = Inter({ subsets: ['latin'] })
 
 export const metadata: Metadata = {
-  title: 'Video Studio Dashboard',
-  description: 'Manage your video queue and automated posting across multiple platforms',
-  generator: 'v0.app',
-  icons: {
-    icon: [
-      {
-        url: '/icon-light-32x32.png',
-        media: '(prefers-color-scheme: light)',
-      },
-      {
-        url: '/icon-dark-32x32.png',
-        media: '(prefers-color-scheme: dark)',
-      },
-      {
-        url: '/icon.svg',
-        type: 'image/svg+xml',
-      },
-    ],
-    apple: '/apple-icon.png',
-  },
+  title: 'Video Studio',
+  description: 'AI-powered video processing and publishing',
 }
 
 export default function RootLayout({
   children,
-}: Readonly<{
+}: {
   children: React.ReactNode
-}>) {
+}) {
   return (
     <html lang="en" className="dark">
-      <body className="font-sans antialiased bg-background text-foreground">
-        {children}
-        <Analytics />
+      <body className={`${inter.className} bg-gray-950 text-white`}>
+        <div className="flex min-h-screen">
+          <Sidebar />
+          <main className="flex-1 ml-64 p-8">
+            {children}
+          </main>
+        </div>
       </body>
     </html>
   )
