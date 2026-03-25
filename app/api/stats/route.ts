@@ -5,6 +5,8 @@ export async function GET() {
   try {
     const supabase = await createClient()
 
+    console.log('[v0] Fetching stats from Supabase')
+
     // Get pending videos count
     const { count: pendingCount } = await supabase
       .from('video_queue')
@@ -31,14 +33,17 @@ export async function GET() {
       .select('*', { count: 'exact', head: true })
       .eq('status', 'posted')
 
-    return NextResponse.json({
+    const stats = {
       pending: pendingCount || 0,
       approved: approvedCount || 0,
       postedToday: postedTodayCount || 0,
       totalPosted: totalPostedCount || 0,
-    })
+    }
+
+    console.log('[v0] Stats calculated:', stats)
+    return NextResponse.json(stats)
   } catch (error) {
-    console.error('Stats API error:', error)
+    console.error('[v0] Stats API error:', error)
     return NextResponse.json(
       { error: 'Failed to fetch stats' },
       { status: 500 }

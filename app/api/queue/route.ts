@@ -36,26 +36,49 @@ export async function POST(request: Request) {
     const supabase = await createClient()
     const body = await request.json()
 
+    console.log('[v0] Queue POST received body:', body)
+
+    if (!body.sourceUrl) {
+      console.log('[v0] Missing sourceUrl')
+      return NextResponse.json(
+        { error: 'Source URL is required' },
+        { status: 400 }
+      )
+    }
+
+    // Extract metadata from URL if possible
+    const title = body.title || `Video - ${new Date().toLocaleDateString()}`
+    const source = body.source || 'URL'
+    const duration = body.duration || '0:00'
+
+    console.log('[v0] Creating video with title:', title)
+
     const { data, error } = await supabase
       .from('video_queue')
       .insert([
         {
-          title: body.title,
-          source: body.source,
-          duration: body.duration,
-          status: 'pending',
+          title,
+          source,
+          duration,
+          status: body.status || 'pending',
           thumbnail: body.thumbnail,
+          source_url: body.sourceUrl,
+          platform: body.platform,
         },
       ])
       .select()
 
-    if (error) throw error
+    if (error) {
+      console.error('[v0] Supabase insert error:', error)
+      throw error
+    }
 
+    console.log('[v0] Video created successfully:', data)
     return NextResponse.json(data[0])
   } catch (error) {
-    console.error('Queue POST error:', error)
+    console.error('[v0] Queue POST error:', error)
     return NextResponse.json(
-      { error: 'Failed to create video' },
+      { error: error instanceof Error ? error.message : 'Failed to create video' },
       { status: 500 }
     )
   }
