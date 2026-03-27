@@ -46,24 +46,16 @@ export async function POST(request: Request) {
       )
     }
 
-    // Extract metadata from URL if possible
-    const title = body.title || `Video - ${new Date().toLocaleDateString()}`
-    const source = body.source || 'URL'
-    const duration = body.duration || '0:00'
-
-    console.log('[v0] Creating video with title:', title)
+    console.log('[v0] Creating video with URL:', body.sourceUrl)
 
     const { data, error } = await supabase
       .from('video_queue')
       .insert([
         {
-          title,
-          source,
-          duration,
-          status: body.status || 'pending',
-          thumbnail: body.thumbnail,
           source_url: body.sourceUrl,
-          platform: body.platform,
+          source_type: body.source || 'youtube',
+          platforms: [body.platform || 'youtube'],
+          status: 'pending',
         },
       ])
       .select()

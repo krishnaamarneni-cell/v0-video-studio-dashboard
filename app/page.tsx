@@ -72,6 +72,7 @@ function QuickActions({ onVideoAdded }: { onVideoAdded: () => void }) {
     setMessage('');
 
     try {
+      console.log('[v0] Processing URL:', url);
       const response = await fetch('/api/queue', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
@@ -82,12 +83,16 @@ function QuickActions({ onVideoAdded }: { onVideoAdded: () => void }) {
         })
       });
 
+      console.log('[v0] API Response status:', response.status);
       const data = await response.json();
+      console.log('[v0] API Response data:', data);
 
       if (!response.ok) {
-        throw new Error(data.error || 'Failed to add video');
+        console.error('[v0] API error details:', { status: response.status, error: data.error, data });
+        throw new Error(data.error || `Failed to add video (${response.status})`);
       }
 
+      console.log('[v0] Video added successfully:', data);
       setStatus('success');
       setMessage('Video added to queue!');
       setUrl('');
@@ -99,7 +104,7 @@ function QuickActions({ onVideoAdded }: { onVideoAdded: () => void }) {
       }, 3000);
 
     } catch (error) {
-      console.error('Error adding video:', error);
+      console.error('[v0] Error adding video:', error);
       setStatus('error');
       setMessage(error instanceof Error ? error.message : 'Failed to add video');
     } finally {
