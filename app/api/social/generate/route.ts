@@ -1,239 +1,194 @@
 // app/api/social/generate/route.ts
-// API routes for AI content generation - NO SDK, uses REST API
+// API route to generate AI text (Groq) and images (Fal.ai)
 
-import { NextRequest, NextResponse } from 'next/server'
+import { NextResponse } from 'next/server';
 
-// POST - Generate content with AI
-export async function POST(request: NextRequest) {
+const GROQ_API_KEY = process.env.GROQ_API_KEY;
+const FAL_API_KEY = process.env.FAL_API_KEY;
+
+export async function POST(request: Request) {
   try {
-    const body = await request.json()
-    const { type, prompt, template, platform } = body
-    
+    const body = await request.json();
+    const { type, prompt } = body;
+
+    if (!prompt) {
+      return NextResponse.json(
+        { error: 'Missing prompt' },
+        { status: 400 }
+      );
+    }
+
+    // Generate text with Groq
     if (type === 'text') {
-      // Generate text with Groq REST API
-      const systemPrompt = getSystemPrompt(template)
-      
-      const groqResponse = await fetch('https://api.groq.com/openai/v1/chat/completions', {
+      if (!GROQ_API_KEY) {
+        return NextResponse.json(
+          { error: 'Groq API key not configured' },
+          { status: 500 }
+        );
+      }
+
+      const response = await fetch('https://api.groq.com/openai/v1/chat/completions', {
         method: 'POST',
         headers: {
-          'Authorization': `Bearer ${process.env.GROQ_API_KEY}`,
-          'Content-Type': 'application/json'
+          'Authorization': `Bearer ${GROQ_API_KEY}`,
+          'Content-Type': 'application/json',
         },
         body: JSON.stringify({
           model: 'llama-3.3-70b-versatile',
           messages: [
-            { role: 'system', content: systemPrompt },
-            { role: 'user', content: prompt }
+            {
+              role: 'system',
+              content: `You are a social media expert for WealthClaude, a financial education platform. 
+Create engaging, informative posts about finance, investing, and wealth building.
+
+Rules:
+- Keep posts concise (under 280 characters for Twitter compatibility)
+- Include relevant emojis
+- Add 3-5 relevant hashtags at the end
+- Be informative but accessible
+- Maintain a professional yet friendly tone
+- Focus on actionable insights`
+            },
+            {
+              role: 'user',
+              content: `Create a social media post about: ${prompt}`
+            }
           ],
+          max_tokens: 500,
           temperature: 0.7,
-          max_tokens: 500
-        })
-      })
-      
-      if (!groqResponse.ok) {
-        const errorText = await groqResponse.text()
-        console.error('Groq API error:', errorText)
-        return NextResponse.json({ 
-          success: false,
-          error: 'Failed to generate text' 
-        }, { status: 500 })
+        }),
+      });
+
+      if (!response.ok) {
+        const error = await response.text();
+        console.error('Groq API error:', error);
+        return NextResponse.json(
+          { error: 'Failed to generate text' },
+          { status: 500 }
+        );
       }
-      
-      const groqData = await groqResponse.json()
-      const generatedText = groqData.choices?.[0]?.message?.content || ''
-      
-      return NextResponse.json({ 
+
+      const data = await response.json();
+      const generatedText = data.choices?.[0]?.message?.content || '';
+
+      return NextResponse.json({
         success: true,
-        text: generatedText 
-      })
-      
-    } else if (type === 'image') {
-      // Generate image with Fal.ai
-      const imageUrl = await generateImage(prompt, template, platform)
-      
-      if (imageUrl) {
-        return NextResponse.json({ 
-          success: true,
-          imageUrl 
-        })
-      } else {
-        return NextResponse.json({ 
-          success: false,
-          error: 'Failed to generate image' 
-        }, { status: 500 })
-      }
-      
-    } else if (type === 'hashtags') {
-      // Generate hashtags
-      const hashtags = await generateHashtags(prompt)
-      
-      return NextResponse.json({ 
-        success: true,
-        hashtags 
-      })
-      
-    } else {
-      return NextResponse.json({ 
-        error: 'Invalid generation type' 
-      }, { status: 400 })
+        text: generatedText,
+      });
     }
-    
+
+    // Generate image with Fal.ai
+    if (type === 'image') {
+      if (!FAL_API_KEY) {
+        return NextResponse.json(
+          { error: 'Fal.ai API key not configured' },
+          { status: 500 }
+        );
+      }
+
+      // Enhanced prompt for better social media images
+      const enhancedPrompt = `Professional social media graphic: ${prompt}. 
+Style: Modern, clean design, vibrant colors, high quality, suitable for Instagram and LinkedIn, 
+no text overlay, professional business aesthetic, square format.`;
+
+      const response = await fetch('https://fal.run/fal-ai/fast-sdxl', {
+        method: 'POST',
+        headers: {
+          'Authorization': `Key ${FAL_API_KEY}`,
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({
+          prompt: enhancedPrompt,
+          image_size: 'square_hd',
+          num_inference_steps: 25,
+          guidance_scale: 7.5,
+          num_images: 1,
+        }),
+      });
+
+      if (!response.ok) {
+        const error = await response.text();
+        console.error('Fal.ai API error:', error);
+        return NextResponse.json(
+          { error: 'Failed to generate image' },
+          { status: 500 }
+        );
+      }
+
+      const data = await response.json();
+      const imageUrl = data.images?.[0]?.url || '';
+
+      if (!imageUrl) {
+        return NextResponse.json(
+          { error: 'No image generated' },
+          { status: 500 }
+        );
+      }
+
+      return NextResponse.json({
+        success: true,
+        image_url: imageUrl,
+      });
+    }
+
+    // Generate hashtags
+    if (type === 'hashtags') {
+      if (!GROQ_API_KEY) {
+        return NextResponse.json(
+          { error: 'Groq API key not configured' },
+          { status: 500 }
+        );
+      }
+
+      const response = await fetch('https://api.groq.com/openai/v1/chat/completions', {
+        method: 'POST',
+        headers: {
+          'Authorization': `Bearer ${GROQ_API_KEY}`,
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({
+          model: 'llama-3.3-70b-versatile',
+          messages: [
+            {
+              role: 'system',
+              content: 'Generate 5-10 relevant hashtags for social media posts. Return only hashtags separated by spaces, nothing else.'
+            },
+            {
+              role: 'user',
+              content: `Generate hashtags for: ${prompt}`
+            }
+          ],
+          max_tokens: 100,
+          temperature: 0.5,
+        }),
+      });
+
+      if (!response.ok) {
+        return NextResponse.json(
+          { error: 'Failed to generate hashtags' },
+          { status: 500 }
+        );
+      }
+
+      const data = await response.json();
+      const hashtags = data.choices?.[0]?.message?.content || '';
+
+      return NextResponse.json({
+        success: true,
+        hashtags: hashtags.trim(),
+      });
+    }
+
+    return NextResponse.json(
+      { error: 'Invalid type. Must be: text, image, or hashtags' },
+      { status: 400 }
+    );
+
   } catch (error: any) {
-    console.error('Generation error:', error)
-    return NextResponse.json({ error: error.message }, { status: 500 })
-  }
-}
-
-function getSystemPrompt(template: string): string {
-  const templates: Record<string, string> = {
-    quote_card: `You are a social media content creator for WealthClaude, a finance brand.
-Create an inspiring or educational quote/tip about finance, investing, or wealth building.
-Keep it under 200 characters. Be memorable and shareable.
-Do NOT include hashtags.`,
-    
-    breaking_news: `You are a financial news writer for WealthClaude.
-Create a concise, attention-grabbing news update about markets or finance.
-Use an urgent but professional tone. Keep under 250 characters.
-Do NOT include hashtags.`,
-    
-    meme: `You are a social media content creator for WealthClaude.
-Create a witty, relatable, and shareable post about finance, investing, or money.
-Be casual and humorous while still being informative. Keep under 200 characters.
-Do NOT include hashtags.`,
-    
-    professional: `You are a social media content creator for WealthClaude, a finance brand.
-Create professional, informative content about finance, investing, and markets.
-Be authoritative but approachable. Include a subtle call to action.
-Keep under 250 characters. Do NOT include hashtags.`,
-    
-    market_update: `You are a financial analyst for WealthClaude.
-Create a brief market update or analysis. Be factual and insightful.
-Use professional language. Keep under 250 characters.
-Do NOT include hashtags.`
-  }
-  
-  return templates[template] || templates.professional
-}
-
-async function generateImage(
-  prompt: string, 
-  template: string, 
-  platform: string
-): Promise<string | null> {
-  const falApiKey = process.env.FAL_API_KEY
-  
-  if (!falApiKey) {
-    console.error('FAL_API_KEY not configured')
-    return null
-  }
-  
-  const templateStyles: Record<string, { style: string; negative: string }> = {
-    quote_card: {
-      style: 'minimalist quote card design, clean typography, professional, gradient background with green tones, modern',
-      negative: 'cluttered, busy, faces, people'
-    },
-    breaking_news: {
-      style: 'breaking news graphic, bold headlines style, professional news broadcast, red and white accents, modern',
-      negative: 'cartoon, unprofessional'
-    },
-    meme: {
-      style: 'viral meme format, bold impact font style, humorous, shareable, eye-catching',
-      negative: 'offensive, low quality'
-    },
-    professional: {
-      style: 'professional business graphic, corporate design, green color scheme, sleek minimalist, finance themed',
-      negative: 'cartoon, childish, unprofessional'
-    },
-    market_update: {
-      style: 'financial market graphic, stock chart aesthetic, professional, green and white colors, modern finance',
-      negative: 'cartoon, unprofessional'
-    }
-  }
-  
-  const dimensions: Record<string, { width: number; height: number }> = {
-    twitter: { width: 1200, height: 675 },
-    instagram_square: { width: 1080, height: 1080 },
-    instagram_portrait: { width: 1080, height: 1350 },
-    linkedin: { width: 1200, height: 627 }
-  }
-  
-  const style = templateStyles[template] || templateStyles.professional
-  const size = dimensions[platform] || dimensions.twitter
-  
-  const fullPrompt = `${prompt}, ${style.style}, WealthClaude brand, professional finance`
-  
-  try {
-    const response = await fetch('https://fal.run/fal-ai/fast-sdxl', {
-      method: 'POST',
-      headers: {
-        'Authorization': `Key ${falApiKey}`,
-        'Content-Type': 'application/json'
-      },
-      body: JSON.stringify({
-        prompt: fullPrompt,
-        negative_prompt: style.negative,
-        image_size: size,
-        num_images: 1,
-        enable_safety_checker: true
-      })
-    })
-    
-    if (response.ok) {
-      const result = await response.json()
-      return result.images?.[0]?.url || null
-    } else {
-      console.error('Fal.ai error:', await response.text())
-      return null
-    }
-  } catch (error) {
-    console.error('Fal.ai request error:', error)
-    return null
-  }
-}
-
-async function generateHashtags(text: string): Promise<string[]> {
-  const groqApiKey = process.env.GROQ_API_KEY
-  
-  if (!groqApiKey) {
-    return ['Finance', 'Investing', 'Markets']
-  }
-  
-  try {
-    const response = await fetch('https://api.groq.com/openai/v1/chat/completions', {
-      method: 'POST',
-      headers: {
-        'Authorization': `Bearer ${groqApiKey}`,
-        'Content-Type': 'application/json'
-      },
-      body: JSON.stringify({
-        model: 'llama-3.3-70b-versatile',
-        messages: [
-          { 
-            role: 'system', 
-            content: 'Generate 5 relevant hashtags for this social media post about finance. Return ONLY the hashtags, one per line, without the # symbol.' 
-          },
-          { role: 'user', content: text }
-        ],
-        temperature: 0.5,
-        max_tokens: 100
-      })
-    })
-    
-    if (!response.ok) {
-      return ['Finance', 'Investing', 'Markets']
-    }
-    
-    const data = await response.json()
-    const responseText = data.choices?.[0]?.message?.content || ''
-    const hashtags = responseText
-      .split('\n')
-      .map((tag: string) => tag.trim().replace('#', ''))
-      .filter((tag: string) => tag.length > 0)
-      .slice(0, 5)
-    
-    return hashtags.length > 0 ? hashtags : ['Finance', 'Investing', 'Markets']
-  } catch (error) {
-    console.error('Hashtag generation error:', error)
-    return ['Finance', 'Investing', 'Markets']
+    console.error('Error in generate API:', error);
+    return NextResponse.json(
+      { error: error.message || 'Generation failed' },
+      { status: 500 }
+    );
   }
 }
