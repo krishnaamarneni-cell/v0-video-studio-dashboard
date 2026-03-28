@@ -1,124 +1,194 @@
-// app/api/social/route.ts
-// API routes for social media posts
+// app/api/social/generate/route.ts
+// API route to generate AI text (Groq) and images (Fal.ai)
 
-import { createClient } from '@supabase/supabase-js'
-import { NextRequest, NextResponse } from 'next/server'
+import { NextResponse } from 'next/server';
 
-const supabase = createClient(
-  process.env.NEXT_PUBLIC_SUPABASE_URL!,
-  process.env.SUPABASE_SERVICE_ROLE_KEY!
-)
+const GROQ_API_KEY = process.env.GROQ_API_KEY;
+const FAL_API_KEY = process.env.FAL_API_KEY;
 
-// GET - Fetch social posts
-export async function GET(request: NextRequest) {
+export async function POST(request: Request) {
   try {
-    const { searchParams } = new URL(request.url)
-    const status = searchParams.get('status')
-    const limit = parseInt(searchParams.get('limit') || '20')
-    
-    let query = supabase
-      .from('social_posts')
-      .select('*')
-      .order('created_at', { ascending: false })
-      .limit(limit)
-    
-    if (status && status !== 'all') {
-      query = query.eq('status', status)
-    }
-    
-    const { data, error } = await query
-    
-    if (error) throw error
-    
-    return NextResponse.json({ posts: data })
-  } catch (error: any) {
-    return NextResponse.json({ error: error.message }, { status: 500 })
-  }
-}
+    const body = await request.json();
+    const { type, prompt } = body;
 
-// POST - Create a new social post
-export async function POST(request: NextRequest) {
-  try {
-    const body = await request.json()
-    
-    const postData = {
-      content_type: body.contentType || 'text',
-      text_content: body.textContent,
-      text_source: body.textSource || 'manual',
-      ai_text_prompt: body.aiTextPrompt,
-      media_url: body.mediaUrl,
-      media_type: body.mediaType,
-      media_source: body.mediaSource,
-      video_url: body.videoUrl,
-      ai_image_prompt: body.aiImagePrompt,
-      template_type: body.templateType || 'professional',
-      include_branding: body.includeBranding !== false,
-      platforms: body.platforms || ['twitter'],
-      scheduled_for: body.scheduledFor,
-      hashtags: body.hashtags,
-      auto_hashtags: body.autoHashtags !== false,
-      status: body.scheduledFor ? 'scheduled' : (body.postNow ? 'pending_approval' : 'draft'),
-      approval_required: !body.postNow
+    if (!prompt) {
+      return NextResponse.json(
+        { error: 'Missing prompt' },
+        { status: 400 }
+      );
     }
-    
-    const { data, error } = await supabase
-      .from('social_posts')
-      .insert(postData)
-      .select()
-      .single()
-    
-    if (error) throw error
-    
-    return NextResponse.json({ post: data })
-  } catch (error: any) {
-    return NextResponse.json({ error: error.message }, { status: 500 })
-  }
-}
 
-// PUT - Update a social post
-export async function PUT(request: NextRequest) {
-  try {
-    const body = await request.json()
-    const { id, ...updates } = body
-    
-    if (!id) {
-      return NextResponse.json({ error: 'Post ID required' }, { status: 400 })
-    }
-    
-    const { data, error } = await supabase
-      .from('social_posts')
-      .update(updates)
-      .eq('id', id)
-      .select()
-      .single()
-    
-    if (error) throw error
-    
-    return NextResponse.json({ post: data })
-  } catch (error: any) {
-    return NextResponse.json({ error: error.message }, { status: 500 })
-  }
-}
+    // Generate text with Groq
+    if (type === 'text') {
+      if (!GROQ_API_KEY) {
+        return NextResponse.json(
+          { error: 'Groq API key not configured' },
+          { status: 500 }
+        );
+      }
 
-// DELETE - Delete a social post
-export async function DELETE(request: NextRequest) {
-  try {
-    const { searchParams } = new URL(request.url)
-    const id = searchParams.get('id')
-    
-    if (!id) {
-      return NextResponse.json({ error: 'Post ID required' }, { status: 400 })
+      const response = await fetch('https://api.groq.com/openai/v1/chat/completions', {
+        method: 'POST',
+        headers: {
+          'Authorization': `Bearer ${GROQ_API_KEY}`,
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({
+          model: 'llama-3.3-70b-versatile',
+          messages: [
+            {
+              role: 'system',
+              content: `You are a social media expert for WealthClaude, a financial education platform. 
+Create engaging, informative posts about finance, investing, and wealth building.
+
+Rules:
+- Keep posts concise (under 280 characters for Twitter compatibility)
+- Include relevant emojis
+- Add 3-5 relevant hashtags at the end
+- Be informative but accessible
+- Maintain a professional yet friendly tone
+- Focus on actionable insights`
+            },
+            {
+              role: 'user',
+              content: `Create a social media post about: ${prompt}`
+            }
+          ],
+          max_tokens: 500,
+          temperature: 0.7,
+        }),
+      });
+
+      if (!response.ok) {
+        const error = await response.text();
+        console.error('Groq API error:', error);
+        return NextResponse.json(
+          { error: 'Failed to generate text' },
+          { status: 500 }
+        );
+      }
+
+      const data = await response.json();
+      const generatedText = data.choices?.[0]?.message?.content || '';
+
+      return NextResponse.json({
+        success: true,
+        text: generatedText,
+      });
     }
-    
-    const { error } = await supabase
-      .from('social_posts')
-      .delete()
-      .eq('id', id)
-    
-    if (error) throw error
-    
-    return NextResponse.json({ success: true })
+
+    // Generate image with Fal.ai
+    if (type === 'image') {
+      if (!FAL_API_KEY) {
+        return NextResponse.json(
+          { error: 'Fal.ai API key not configured' },
+          { status: 500 }
+        );
+      }
+
+      // Enhanced prompt for better social media images
+      const enhancedPrompt = `Professional social media graphic: ${prompt}. 
+Style: Modern, clean design, vibrant colors, high quality, suitable for Instagram and LinkedIn, 
+no text overlay, professional business aesthetic, square format.`;
+
+      const response = await fetch('https://fal.run/fal-ai/fast-sdxl', {
+        method: 'POST',
+        headers: {
+          'Authorization': `Key ${FAL_API_KEY}`,
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({
+          prompt: enhancedPrompt,
+          image_size: 'square_hd',
+          num_inference_steps: 25,
+          guidance_scale: 7.5,
+          num_images: 1,
+        }),
+      });
+
+      if (!response.ok) {
+        const error = await response.text();
+        console.error('Fal.ai API error:', error);
+        return NextResponse.json(
+          { error: 'Failed to generate image' },
+          { status: 500 }
+        );
+      }
+
+      const data = await response.json();
+      const imageUrl = data.images?.[0]?.url || '';
+
+      if (!imageUrl) {
+        return NextResponse.json(
+          { error: 'No image generated' },
+          { status: 500 }
+        );
+      }
+
+      return NextResponse.json({
+        success: true,
+        image_url: imageUrl,
+      });
+    }
+
+    // Generate hashtags
+    if (type === 'hashtags') {
+      if (!GROQ_API_KEY) {
+        return NextResponse.json(
+          { error: 'Groq API key not configured' },
+          { status: 500 }
+        );
+      }
+
+      const response = await fetch('https://api.groq.com/openai/v1/chat/completions', {
+        method: 'POST',
+        headers: {
+          'Authorization': `Bearer ${GROQ_API_KEY}`,
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({
+          model: 'llama-3.3-70b-versatile',
+          messages: [
+            {
+              role: 'system',
+              content: 'Generate 5-10 relevant hashtags for social media posts. Return only hashtags separated by spaces, nothing else.'
+            },
+            {
+              role: 'user',
+              content: `Generate hashtags for: ${prompt}`
+            }
+          ],
+          max_tokens: 100,
+          temperature: 0.5,
+        }),
+      });
+
+      if (!response.ok) {
+        return NextResponse.json(
+          { error: 'Failed to generate hashtags' },
+          { status: 500 }
+        );
+      }
+
+      const data = await response.json();
+      const hashtags = data.choices?.[0]?.message?.content || '';
+
+      return NextResponse.json({
+        success: true,
+        hashtags: hashtags.trim(),
+      });
+    }
+
+    return NextResponse.json(
+      { error: 'Invalid type. Must be: text, image, or hashtags' },
+      { status: 400 }
+    );
+
   } catch (error: any) {
-    return NextResponse.json({ error: error.message }, { status: 500 })
+    console.error('Error in generate API:', error);
+    return NextResponse.json(
+      { error: error.message || 'Generation failed' },
+      { status: 500 }
+    );
   }
 }
