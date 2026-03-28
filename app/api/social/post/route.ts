@@ -1,133 +1,74 @@
-// app/api/social/post/route.ts
-// API route to post to Instagram/LinkedIn via Make.com
-// Supports both image posts and reels/videos
+import { NextResponse } from "next/server";
 
-import { NextResponse } from 'next/server';
-import { createClient } from '@supabase/supabase-js';
-
-const MAKE_WEBHOOK_URL = process.env.MAKE_WEBHOOK_URL || 'https://hook.us2.make.com/0kaubvw2hfot76jkqa5nstppp5q7q953';
-
-const supabase = createClient(
-  process.env.NEXT_PUBLIC_SUPABASE_URL!,
-  process.env.SUPABASE_SERVICE_ROLE_KEY!
-);
+// Make.com webhook URL
+const MAKE_WEBHOOK_URL = process.env.MAKE_WEBHOOK_URL || "https://hook.us2.make.com/0kaubvw2hfot76jkqa5nstppp5q7q953";
 
 export async function POST(request: Request) {
   try {
     const body = await request.json();
-    const {
-      platform,
-      text,
-      image_url,
-      video_url,
-      content_type = 'image', // 'image' or 'reel'
-      post_id
-    } = body;
+    const { text, image_url, video_url, platforms, content_type } = body;
 
-    // Validate required fields
-    if (!platform || !text) {
-      return NextResponse.json(
-        { error: 'Missing required fields: platform, text' },
-        { status: 400 }
-      );
+    if (!text) {
+      return NextResponse.json({ error: "Caption/text is required" }, { status: 400 });
     }
 
-    // Validate platform
-    if (!['instagram', 'linkedin', 'both'].includes(platform)) {
-      return NextResponse.json(
-        { error: 'Invalid platform. Must be: instagram, linkedin, or both' },
-        { status: 400 }
-      );
+    if (content_type === "image" && !image_url) {
+      return NextResponse.json({ error: "Image URL is required for image posts" }, { status: 400 });
     }
 
-    // Determine platforms to post to
-    const platforms = platform === 'both'
-      ? ['instagram', 'linkedin']
-      : [platform];
+    if (content_type === "reel" && !video_url) {
+      return NextResponse.json({ error: "Video URL is required for reel posts" }, { status: 400 });
+    }
 
     const results: Record<string, any> = {};
+    const platformList = platforms || ["instagram", "linkedin"];
 
-    // Post to each platform via Make.com
-    for (const p of platforms) {
-      const payload: Record<string, any> = {
-        platform: p,
-        text: text,
-        content_type: content_type,
-        timestamp: new Date().toISOString()
-      };
-
-      // Add media based on content type
-      if (content_type === 'reel' && video_url) {
-        payload.video_url = video_url;
-        payload.image_url = image_url || null; // Thumbnail
-      } else if (image_url) {
-        payload.image_url = image_url;
-      }
-
+    // Send to Make.com for each platform
+    for (const platform of platformList) {
       try {
+        const payload = {
+          platform,
+          content_type: content_type || "image",
+          text,
+          image_url: content_type === "image" ? image_url : null,
+          video_url: content_type === "reel" ? video_url : null,
+          timestamp: new Date().toISOString()
+        };
+
         const response = await fetch(MAKE_WEBHOOK_URL, {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
           body: JSON.stringify(payload)
         });
 
         const responseText = await response.text();
 
-        results[p] = {
-          success: response.ok || responseText === 'Accepted',
-          status: response.status,
-          response: responseText,
-          content_type: content_type
+        results[platform] = {
+          success: response.ok || responseText === "Accepted",
+          response: responseText
         };
       } catch (error: any) {
-        results[p] = {
+        results[platform] = {
           success: false,
           error: error.message
         };
       }
     }
 
-    // Update post status in Supabase if post_id provided
-    if (post_id) {
-      const allSuccess = Object.values(results).every((r: any) => r.success);
-
-      await supabase
-        .from('social_posts')
-        .update({
-          status: allSuccess ? 'posted' : 'failed',
-          posted_at: allSuccess ? new Date().toISOString() : null,
-          post_results: results
-        })
-        .eq('id', post_id);
-    }
-
-    // Log the post
-    try {
-      await supabase
-        .from('social_posts')
-        .insert({
-          text_content: text,
-          media_url: video_url || image_url,
-          platforms: platforms,
-          content_type: content_type,
-          status: Object.values(results).every((r: any) => r.success) ? 'posted' : 'failed',
-          posted_at: new Date().toISOString(),
-          post_results: results
-        });
-    } catch (e) {
-      // Logging is optional, don't fail if it doesn't work
-      console.log('Could not log post to Supabase:', e);
-    }
+    const allSuccess = Object.values(results).every((r: any) => r.success);
 
     return NextResponse.json({
-      success: true,
-      results: results
+      success: allSuccess,
+      results,
+      message: allSuccess
+        ? `Posted to ${platformList.join(" & ")}!`
+        : "Some posts failed"
     });
 
   } catch (error: any) {
-    console.error('Error posting to Make.com:', error);
+    console.error("Post error:", error);
     return NextResponse.json(
-      { error: error.message || 'Failed to post' },
+      { error: error.message || "Failed to post" },
       { status: 500 }
     );
   }
