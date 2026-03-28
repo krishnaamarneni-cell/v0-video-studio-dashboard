@@ -33,8 +33,8 @@ export async function POST(request: Request) {
     }
 
     // Determine platforms to post to
-    const platforms = platform === 'both' 
-      ? ['instagram', 'linkedin'] 
+    const platforms = platform === 'both'
+      ? ['instagram', 'linkedin']
       : [platform];
 
     const results: Record<string, any> = {};
@@ -55,7 +55,7 @@ export async function POST(request: Request) {
       });
 
       const responseText = await response.text();
-      
+
       results[p] = {
         success: response.ok || responseText === 'Accepted',
         status: response.status,
@@ -66,7 +66,7 @@ export async function POST(request: Request) {
     // Update post status in Supabase if post_id provided
     if (post_id) {
       const allSuccess = Object.values(results).every((r: any) => r.success);
-      
+
       await supabase
         .from('social_posts')
         .update({
