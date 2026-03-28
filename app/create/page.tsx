@@ -7,7 +7,6 @@ export default function CreatePostPage() {
   // Form state
   const [text, setText] = useState('');
   const [imageUrl, setImageUrl] = useState('');
-  const [videoUrl, setVideoUrl] = useState('');
   const [contentType, setContentType] = useState<'image' | 'reel'>('image');
   const [platforms, setPlatforms] = useState({
     instagram: true,
@@ -16,9 +15,8 @@ export default function CreatePostPage() {
   const [scheduleDate, setScheduleDate] = useState('');
   const [scheduleTime, setScheduleTime] = useState('');
 
-  // Reel import state
+  // Reel state - just the URL, no download
   const [reelUrl, setReelUrl] = useState('');
-  const [isDownloadingReel, setIsDownloadingReel] = useState(false);
 
   // UI state
   const [isGeneratingText, setIsGeneratingText] = useState(false);
@@ -146,66 +144,8 @@ export default function CreatePostPage() {
     }
   };
 
-  // DOWNLOAD AND PROCESS INSTAGRAM REEL
-  const handleImportReel = async () => {
-    if (!reelUrl.trim()) {
-      setMessage({ type: 'error', text: 'Please paste an Instagram Reel URL' });
-      return;
-    }
-
-    // Validate Instagram URL
-    if (!reelUrl.includes('instagram.com/reel') && !reelUrl.includes('instagram.com/p/')) {
-      setMessage({ type: 'error', text: 'Please enter a valid Instagram Reel URL' });
-      return;
-    }
-
-    setIsDownloadingReel(true);
-    setMessage(null);
-
-    try {
-      const response = await fetch('/api/social/import-reel', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          url: reelUrl,
-          generate_caption: true,
-        }),
-      });
-
-      const data = await response.json();
-
-      if (data.error) {
-        setMessage({ type: 'error', text: data.error });
-      } else {
-        setVideoUrl(data.video_url);
-        setContentType('reel');
-
-        // If caption was generated, set it
-        if (data.caption) {
-          setText(data.caption);
-        }
-
-        // If thumbnail was extracted, set it as preview
-        if (data.thumbnail_url) {
-          setImageUrl(data.thumbnail_url);
-        }
-
-        setMessage({ type: 'success', text: 'Reel imported successfully! Caption generated.' });
-      }
-    } catch (error) {
-      setMessage({ type: 'error', text: 'Failed to import reel. Make sure the URL is public.' });
-    } finally {
-      setIsDownloadingReel(false);
-    }
-  };
-
-  // Generate caption for video/reel
+  // Generate caption for reel (based on topic/context)
   const handleGenerateCaptionForReel = async () => {
-    if (!videoUrl) {
-      setMessage({ type: 'error', text: 'Please import a reel first' });
-      return;
-    }
-
     setIsGeneratingText(true);
     setMessage(null);
 
@@ -215,7 +155,7 @@ export default function CreatePostPage() {
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
           type: 'reel_caption',
-          prompt: reelUrl || 'engaging finance reel',
+          prompt: textTopic || 'engaging finance reel',
         }),
       });
 
@@ -234,31 +174,82 @@ export default function CreatePostPage() {
     }
   };
 
-  // Post immediately via Make.com
+  // POST NOW - Different handling for images vs reels
   const handlePostNow = async () => {
-    if (!text.trim()) {
-      setMessage({ type: 'error', text: 'Please enter post text' });
-      return;
-    }
-
     if (!platforms.instagram && !platforms.linkedin) {
       setMessage({ type: 'error', text: 'Please select at least one platform' });
       return;
     }
 
-    // Instagram requires media
-    if (platforms.instagram && !imageUrl && !videoUrl) {
-      setMessage({ type: 'error', text: 'Instagram requires an image or video.' });
-      return;
-    }
+    const platformList = [];
+    if (platforms.instagram) platformList.push('instagram');
+    if (platforms.linkedin) platformList.push('linkedin');
 
     setIsPosting(true);
     setMessage(null);
 
     try {
-      const platformList = [];
-      if (platforms.instagram) platformList.push('instagram');
-      if (platforms.linkedin) platformList.push('linkedin');
+      // ============================================
+      // REEL: Save to Supabase - Local Python will process
+      // ============================================
+      if (contentType === 'reel') {
+        if (!reelUrl.trim()) {
+          setMessage({ type: 'error', text: 'Please enter an Instagram Reel URL' });
+          setIsPosting(false);
+          return;
+        }
+
+        // Validate Instagram URL
+        if (!reelUrl.includes('instagram.com/reel') && !reelUrl.includes('instagram.com/p/')) {
+          setMessage({ type: 'error', text: 'Please enter a valid Instagram Reel URL' });
+          setIsPosting(false);
+          return;
+        }
+
+        // Save to Supabase - local Python script will pick it up
+        const response = await fetch('/api/social', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            text_content: text || '', // Optional - AI will generate if empty
+            source_url: reelUrl,      // Instagram reel URL for local download
+            media_url: null,          // Will be filled by local script after upload
+            platforms: platformList,
+            content_type: 'reel',
+            status: 'pending_approval',
+          }),
+        });
+
+        const data = await response.json();
+
+        if (data.error) {
+          setMessage({ type: 'error', text: data.error });
+        } else {
+          setMessage({
+            type: 'success',
+            text: '✅ Reel queued! Your local Python script will download, upload to Cloudinary, and post via Make.com.'
+          });
+          clearForm();
+        }
+        setIsPosting(false);
+        return; // Exit early for reels
+      }
+
+      // ============================================
+      // IMAGE: Post immediately via Make.com
+      // ============================================
+      if (!text.trim()) {
+        setMessage({ type: 'error', text: 'Please enter post text' });
+        setIsPosting(false);
+        return;
+      }
+
+      // Instagram requires media
+      if (platforms.instagram && !imageUrl) {
+        setMessage({ type: 'error', text: 'Instagram requires an image.' });
+        setIsPosting(false);
+        return;
+      }
 
       const response = await fetch('/api/social/post', {
         method: 'POST',
@@ -266,9 +257,9 @@ export default function CreatePostPage() {
         body: JSON.stringify({
           platform: platformList.length === 2 ? 'both' : platformList[0],
           text: text,
-          image_url: imageUrl || null,
-          video_url: videoUrl || null,
-          content_type: contentType,
+          image_url: imageUrl,
+          video_url: null,
+          content_type: 'image',
         }),
       });
 
@@ -278,7 +269,6 @@ export default function CreatePostPage() {
         setMessage({ type: 'error', text: data.error });
       } else {
         setMessage({ type: 'success', text: '🎉 Posted successfully to ' + platformList.join(' & ') + '!' });
-        // Clear form after successful post
         clearForm();
       }
     } catch (error) {
@@ -288,21 +278,28 @@ export default function CreatePostPage() {
     }
   };
 
-  // Schedule for later (saves to Supabase)
+  // Schedule for later (saves to Supabase for both image and reel)
   const handleSchedule = async () => {
-    if (!text.trim()) {
-      setMessage({ type: 'error', text: 'Please enter post text' });
-      return;
-    }
-
     if (!platforms.instagram && !platforms.linkedin) {
       setMessage({ type: 'error', text: 'Please select at least one platform' });
       return;
     }
 
-    if (platforms.instagram && !imageUrl && !videoUrl) {
-      setMessage({ type: 'error', text: 'Instagram requires an image or video.' });
-      return;
+    // Validation based on content type
+    if (contentType === 'image') {
+      if (!text.trim()) {
+        setMessage({ type: 'error', text: 'Please enter post text' });
+        return;
+      }
+      if (platforms.instagram && !imageUrl) {
+        setMessage({ type: 'error', text: 'Instagram requires an image.' });
+        return;
+      }
+    } else {
+      if (!reelUrl.trim()) {
+        setMessage({ type: 'error', text: 'Please enter an Instagram Reel URL' });
+        return;
+      }
     }
 
     setIsScheduling(true);
@@ -323,8 +320,9 @@ export default function CreatePostPage() {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
-          text_content: text,
-          media_url: contentType === 'reel' ? videoUrl : imageUrl,
+          text_content: text || '',
+          media_url: contentType === 'image' ? imageUrl : null,
+          source_url: contentType === 'reel' ? reelUrl : null,
           platforms: platformList,
           status: 'pending_approval',
           content_type: contentType,
@@ -350,7 +348,6 @@ export default function CreatePostPage() {
   const clearForm = () => {
     setText('');
     setImageUrl('');
-    setVideoUrl('');
     setTextTopic('');
     setImagePrompt('');
     setReelUrl('');
@@ -391,8 +388,8 @@ export default function CreatePostPage() {
             <button
               onClick={() => setContentType('image')}
               className={`px-6 py-3 rounded-lg font-medium transition-colors ${contentType === 'image'
-                  ? 'bg-green-600 text-white'
-                  : 'bg-gray-800 text-gray-300 hover:bg-gray-700'
+                ? 'bg-green-600 text-white'
+                : 'bg-gray-800 text-gray-300 hover:bg-gray-700'
                 }`}
             >
               📸 Image Post
@@ -400,8 +397,8 @@ export default function CreatePostPage() {
             <button
               onClick={() => setContentType('reel')}
               className={`px-6 py-3 rounded-lg font-medium transition-colors ${contentType === 'reel'
-                  ? 'bg-purple-600 text-white'
-                  : 'bg-gray-800 text-gray-300 hover:bg-gray-700'
+                ? 'bg-purple-600 text-white'
+                : 'bg-gray-800 text-gray-300 hover:bg-gray-700'
                 }`}
             >
               🎬 Reel / Video
@@ -413,37 +410,44 @@ export default function CreatePostPage() {
           {/* Left Column - Content Creation */}
           <div className="space-y-6">
 
-            {/* Reel Import Section (only show for reel type) */}
+            {/* ============================================ */}
+            {/* REEL SECTION - Just paste URL, no download */}
+            {/* ============================================ */}
             {contentType === 'reel' && (
               <div className="bg-purple-900/30 border border-purple-700 rounded-lg p-6">
-                <h2 className="text-lg font-medium mb-4">🎬 Import Instagram Reel</h2>
+                <h2 className="text-lg font-medium mb-4">🎬 Instagram Reel URL</h2>
                 <p className="text-sm text-gray-400 mb-4">
-                  Paste an Instagram Reel URL. We'll download it and auto-generate a caption!
+                  Paste the Instagram Reel URL below. Your local Python script will handle the download and posting.
                 </p>
 
-                <div className="flex gap-2">
-                  <input
-                    type="url"
-                    value={reelUrl}
-                    onChange={(e) => setReelUrl(e.target.value)}
-                    placeholder="https://www.instagram.com/reel/ABC123..."
-                    className="flex-1 bg-gray-700 border border-gray-600 rounded-lg px-4 py-2 text-white placeholder-gray-400 focus:outline-none focus:border-purple-500"
-                  />
-                  <button
-                    onClick={handleImportReel}
-                    disabled={isDownloadingReel}
-                    className="px-4 py-2 bg-purple-600 hover:bg-purple-700 disabled:bg-purple-800 disabled:cursor-not-allowed rounded-lg font-medium transition-colors whitespace-nowrap"
-                  >
-                    {isDownloadingReel ? '⏳ Downloading...' : '📥 Import'}
-                  </button>
-                </div>
+                <input
+                  type="url"
+                  value={reelUrl}
+                  onChange={(e) => setReelUrl(e.target.value)}
+                  placeholder="https://www.instagram.com/reel/ABC123..."
+                  className="w-full bg-gray-700 border border-gray-600 rounded-lg px-4 py-3 text-white placeholder-gray-400 focus:outline-none focus:border-purple-500"
+                />
 
-                {videoUrl && (
-                  <div className="mt-4 p-3 bg-green-900/30 border border-green-700 rounded-lg">
-                    <p className="text-sm text-green-400">✅ Reel imported successfully!</p>
-                    <p className="text-xs text-gray-400 mt-1 truncate">{videoUrl}</p>
+                {reelUrl && reelUrl.includes('instagram.com') && (
+                  <div className="mt-3 p-3 bg-green-900/30 border border-green-700 rounded-lg">
+                    <p className="text-sm text-green-400">✅ Valid Instagram URL detected</p>
                   </div>
                 )}
+
+                {/* How it works info box */}
+                <div className="mt-4 p-4 bg-blue-900/20 border border-blue-700/50 rounded-lg">
+                  <h4 className="text-blue-300 font-medium mb-2">📋 How Reel Posting Works:</h4>
+                  <ol className="text-sm text-gray-400 space-y-1 list-decimal list-inside">
+                    <li>Paste the Instagram reel URL above</li>
+                    <li>Click "Post Now" or "Schedule"</li>
+                    <li>Saves to queue (Supabase)</li>
+                    <li>Your local <code className="bg-gray-700 px-1 rounded">reel_processor.py</code> picks it up</li>
+                    <li>Downloads video with yt-dlp</li>
+                    <li>Uploads to Cloudinary</li>
+                    <li>Generates caption with AI (if empty)</li>
+                    <li>Posts via Make.com → Instagram + LinkedIn</li>
+                  </ol>
+                </div>
               </div>
             )}
 
@@ -463,7 +467,7 @@ export default function CreatePostPage() {
                     className="flex-1 bg-gray-700 border border-gray-600 rounded-lg px-4 py-2 text-white placeholder-gray-400 focus:outline-none focus:border-green-500"
                   />
                   <button
-                    onClick={handleGenerateText}
+                    onClick={contentType === 'reel' ? handleGenerateCaptionForReel : handleGenerateText}
                     disabled={isGeneratingText}
                     className="px-4 py-2 bg-purple-600 hover:bg-purple-700 disabled:bg-purple-800 disabled:cursor-not-allowed rounded-lg font-medium transition-colors whitespace-nowrap"
                   >
@@ -474,11 +478,16 @@ export default function CreatePostPage() {
 
               {/* Manual Text Input */}
               <div>
-                <label className="block text-sm text-gray-400 mb-2">Or write manually</label>
+                <label className="block text-sm text-gray-400 mb-2">
+                  {contentType === 'reel' ? 'Or write caption (optional - AI will generate if empty)' : 'Or write manually'}
+                </label>
                 <textarea
                   value={text}
                   onChange={(e) => setText(e.target.value)}
-                  placeholder="Write your post here..."
+                  placeholder={contentType === 'reel'
+                    ? "Leave empty for AI-generated caption, or write your own..."
+                    : "Write your post here..."
+                  }
                   rows={5}
                   className="w-full bg-gray-700 border border-gray-600 rounded-lg px-4 py-3 text-white placeholder-gray-400 focus:outline-none focus:border-green-500 resize-none"
                 />
@@ -494,7 +503,7 @@ export default function CreatePostPage() {
               <div className="bg-gray-800 rounded-lg p-6">
                 <h2 className="text-lg font-medium mb-4">🖼️ Image</h2>
 
-                {/* AUTO-GENERATE FROM TEXT - NEW! */}
+                {/* AUTO-GENERATE FROM TEXT */}
                 <div className="mb-4 p-4 bg-green-900/20 border border-green-700/50 rounded-lg">
                   <label className="block text-sm text-green-400 font-medium mb-2">
                     ✨ Auto-Generate from Text (Recommended)
@@ -642,24 +651,26 @@ export default function CreatePostPage() {
               <h2 className="text-lg font-medium mb-4">👁️ Preview</h2>
 
               <div className="bg-gray-700 rounded-lg p-4">
-                {(imageUrl || videoUrl) && (
+                {contentType === 'image' && imageUrl && (
                   <div className="aspect-square max-h-[200px] rounded-lg overflow-hidden mb-3 bg-gray-600">
-                    {contentType === 'reel' && videoUrl ? (
-                      <div className="w-full h-full flex items-center justify-center">
-                        <span className="text-4xl">🎬</span>
-                        <span className="ml-2 text-sm text-gray-300">Video Ready</span>
-                      </div>
-                    ) : (
-                      <img
-                        src={imageUrl}
-                        alt="Preview"
-                        className="w-full h-full object-cover"
-                      />
-                    )}
+                    <img
+                      src={imageUrl}
+                      alt="Preview"
+                      className="w-full h-full object-cover"
+                    />
+                  </div>
+                )}
+                {contentType === 'reel' && reelUrl && (
+                  <div className="aspect-video max-h-[150px] rounded-lg overflow-hidden mb-3 bg-purple-900/30 border border-purple-700 flex items-center justify-center">
+                    <div className="text-center">
+                      <span className="text-4xl">🎬</span>
+                      <p className="text-sm text-purple-300 mt-2">Reel Video</p>
+                      <p className="text-xs text-gray-400 mt-1">Will be downloaded by local script</p>
+                    </div>
                   </div>
                 )}
                 <p className="text-sm text-gray-300 whitespace-pre-wrap line-clamp-4">
-                  {text || 'Your post text will appear here...'}
+                  {text || (contentType === 'reel' ? 'Caption will be AI-generated...' : 'Your post text will appear here...')}
                 </p>
                 <div className="flex gap-2 mt-3">
                   {platforms.instagram && (
@@ -669,7 +680,7 @@ export default function CreatePostPage() {
                   )}
                   {platforms.linkedin && (
                     <span className="px-2 py-1 bg-blue-600/30 text-blue-300 rounded text-xs">
-                      LinkedIn
+                      LinkedIn {contentType === 'reel' ? 'Video' : 'Post'}
                     </span>
                   )}
                 </div>
@@ -680,19 +691,19 @@ export default function CreatePostPage() {
             <div className="space-y-3">
               <button
                 onClick={handlePostNow}
-                disabled={isPosting || !text.trim()}
+                disabled={isPosting || (contentType === 'image' && !text.trim()) || (contentType === 'reel' && !reelUrl.trim())}
                 className="w-full py-4 bg-green-600 hover:bg-green-700 disabled:bg-gray-600 disabled:cursor-not-allowed rounded-lg font-semibold text-lg transition-colors flex items-center justify-center gap-2"
               >
                 {isPosting ? (
-                  <>⏳ Posting...</>
+                  <>⏳ {contentType === 'reel' ? 'Queueing...' : 'Posting...'}</>
                 ) : (
-                  <>🚀 Post Now</>
+                  <>🚀 {contentType === 'reel' ? 'Add to Queue' : 'Post Now'}</>
                 )}
               </button>
 
               <button
                 onClick={handleSchedule}
-                disabled={isScheduling || !text.trim()}
+                disabled={isScheduling || (contentType === 'image' && !text.trim()) || (contentType === 'reel' && !reelUrl.trim())}
                 className="w-full py-4 bg-blue-600 hover:bg-blue-700 disabled:bg-gray-600 disabled:cursor-not-allowed rounded-lg font-semibold text-lg transition-colors flex items-center justify-center gap-2"
               >
                 {isScheduling ? (
@@ -705,9 +716,19 @@ export default function CreatePostPage() {
 
             {/* Info */}
             <div className="text-sm text-gray-400 space-y-2 bg-gray-800/50 rounded-lg p-4">
-              <p>💡 <strong>Post Now:</strong> Immediately posts via Make.com</p>
-              <p>📅 <strong>Schedule:</strong> Saves to queue for later posting</p>
-              <p>✨ <strong>Auto-Generate:</strong> Creates image based on your text</p>
+              {contentType === 'image' ? (
+                <>
+                  <p>🚀 <strong>Post Now:</strong> Immediately posts via Make.com</p>
+                  <p>📅 <strong>Schedule:</strong> Saves to queue for later posting</p>
+                  <p>✨ <strong>Auto-Generate:</strong> Creates image based on your text</p>
+                </>
+              ) : (
+                <>
+                  <p>🚀 <strong>Add to Queue:</strong> Saves reel URL to Supabase</p>
+                  <p>🐍 <strong>Local Script:</strong> Downloads, uploads, posts automatically</p>
+                  <p>🤖 <strong>AI Caption:</strong> Generated if you leave caption empty</p>
+                </>
+              )}
             </div>
           </div>
         </div>
