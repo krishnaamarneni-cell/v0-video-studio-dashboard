@@ -1,5 +1,6 @@
 // app/api/social/post/route.ts
-// API route to post directly to Instagram/LinkedIn via Make.com
+// API route to post to Instagram/LinkedIn via Make.com
+// Supports both image posts and reels/videos
 
 import { NextResponse } from 'next/server';
 import { createClient } from '@supabase/supabase-js';
@@ -14,7 +15,14 @@ const supabase = createClient(
 export async function POST(request: Request) {
   try {
     const body = await request.json();
-    const { platform, text, image_url, post_id } = body;
+    const {
+      platform,
+      text,
+      image_url,
+      video_url,
+      content_type = 'image', // 'image' or 'reel'
+      post_id
+    } = body;
 
     // Validate required fields
     if (!platform || !text) {
@@ -41,26 +49,42 @@ export async function POST(request: Request) {
 
     // Post to each platform via Make.com
     for (const p of platforms) {
-      const payload = {
+      const payload: Record<string, any> = {
         platform: p,
         text: text,
-        image_url: image_url || null,
+        content_type: content_type,
         timestamp: new Date().toISOString()
       };
 
-      const response = await fetch(MAKE_WEBHOOK_URL, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify(payload)
-      });
+      // Add media based on content type
+      if (content_type === 'reel' && video_url) {
+        payload.video_url = video_url;
+        payload.image_url = image_url || null; // Thumbnail
+      } else if (image_url) {
+        payload.image_url = image_url;
+      }
 
-      const responseText = await response.text();
+      try {
+        const response = await fetch(MAKE_WEBHOOK_URL, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify(payload)
+        });
 
-      results[p] = {
-        success: response.ok || responseText === 'Accepted',
-        status: response.status,
-        response: responseText
-      };
+        const responseText = await response.text();
+
+        results[p] = {
+          success: response.ok || responseText === 'Accepted',
+          status: response.status,
+          response: responseText,
+          content_type: content_type
+        };
+      } catch (error: any) {
+        results[p] = {
+          success: false,
+          error: error.message
+        };
+      }
     }
 
     // Update post status in Supabase if post_id provided
@@ -75,6 +99,24 @@ export async function POST(request: Request) {
           post_results: results
         })
         .eq('id', post_id);
+    }
+
+    // Log the post
+    try {
+      await supabase
+        .from('social_posts')
+        .insert({
+          text_content: text,
+          media_url: video_url || image_url,
+          platforms: platforms,
+          content_type: content_type,
+          status: Object.values(results).every((r: any) => r.success) ? 'posted' : 'failed',
+          posted_at: new Date().toISOString(),
+          post_results: results
+        });
+    } catch (e) {
+      // Logging is optional, don't fail if it doesn't work
+      console.log('Could not log post to Supabase:', e);
     }
 
     return NextResponse.json({
