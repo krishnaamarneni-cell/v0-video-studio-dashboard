@@ -1,12 +1,7 @@
 // app/api/social/generate/route.ts
-// API routes for AI content generation
+// API routes for AI content generation - NO SDK, uses REST API
 
 import { NextRequest, NextResponse } from 'next/server'
-import Groq from 'groq-sdk'
-
-const groq = new Groq({
-  apiKey: process.env.GROQ_API_KEY
-})
 
 // POST - Generate content with AI
 export async function POST(request: NextRequest) {
@@ -15,20 +10,37 @@ export async function POST(request: NextRequest) {
     const { type, prompt, template, platform } = body
     
     if (type === 'text') {
-      // Generate text with Groq
+      // Generate text with Groq REST API
       const systemPrompt = getSystemPrompt(template)
       
-      const completion = await groq.chat.completions.create({
-        messages: [
-          { role: 'system', content: systemPrompt },
-          { role: 'user', content: prompt }
-        ],
-        model: 'llama-3.3-70b-versatile',
-        temperature: 0.7,
-        max_tokens: 500
+      const groqResponse = await fetch('https://api.groq.com/openai/v1/chat/completions', {
+        method: 'POST',
+        headers: {
+          'Authorization': `Bearer ${process.env.GROQ_API_KEY}`,
+          'Content-Type': 'application/json'
+        },
+        body: JSON.stringify({
+          model: 'llama-3.3-70b-versatile',
+          messages: [
+            { role: 'system', content: systemPrompt },
+            { role: 'user', content: prompt }
+          ],
+          temperature: 0.7,
+          max_tokens: 500
+        })
       })
       
-      const generatedText = completion.choices[0]?.message?.content || ''
+      if (!groqResponse.ok) {
+        const errorText = await groqResponse.text()
+        console.error('Groq API error:', errorText)
+        return NextResponse.json({ 
+          success: false,
+          error: 'Failed to generate text' 
+        }, { status: 500 })
+      }
+      
+      const groqData = await groqResponse.json()
+      const generatedText = groqData.choices?.[0]?.message?.content || ''
       
       return NextResponse.json({ 
         success: true,
@@ -180,25 +192,43 @@ async function generateImage(
 }
 
 async function generateHashtags(text: string): Promise<string[]> {
+  const groqApiKey = process.env.GROQ_API_KEY
+  
+  if (!groqApiKey) {
+    return ['Finance', 'Investing', 'Markets']
+  }
+  
   try {
-    const completion = await groq.chat.completions.create({
-      messages: [
-        { 
-          role: 'system', 
-          content: 'Generate 5 relevant hashtags for this social media post about finance. Return ONLY the hashtags, one per line, without the # symbol.' 
-        },
-        { role: 'user', content: text }
-      ],
-      model: 'llama-3.3-70b-versatile',
-      temperature: 0.5,
-      max_tokens: 100
+    const response = await fetch('https://api.groq.com/openai/v1/chat/completions', {
+      method: 'POST',
+      headers: {
+        'Authorization': `Bearer ${groqApiKey}`,
+        'Content-Type': 'application/json'
+      },
+      body: JSON.stringify({
+        model: 'llama-3.3-70b-versatile',
+        messages: [
+          { 
+            role: 'system', 
+            content: 'Generate 5 relevant hashtags for this social media post about finance. Return ONLY the hashtags, one per line, without the # symbol.' 
+          },
+          { role: 'user', content: text }
+        ],
+        temperature: 0.5,
+        max_tokens: 100
+      })
     })
     
-    const response = completion.choices[0]?.message?.content || ''
-    const hashtags = response
+    if (!response.ok) {
+      return ['Finance', 'Investing', 'Markets']
+    }
+    
+    const data = await response.json()
+    const responseText = data.choices?.[0]?.message?.content || ''
+    const hashtags = responseText
       .split('\n')
-      .map(tag => tag.trim().replace('#', ''))
-      .filter(tag => tag.length > 0)
+      .map((tag: string) => tag.trim().replace('#', ''))
+      .filter((tag: string) => tag.length > 0)
       .slice(0, 5)
     
     return hashtags.length > 0 ? hashtags : ['Finance', 'Investing', 'Markets']
