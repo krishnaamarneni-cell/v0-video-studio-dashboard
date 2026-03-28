@@ -118,7 +118,8 @@ export default function SettingsPage() {
 
         <div className="space-y-4">
           {platforms.map((platform) => {
-            const account = settings.connectedAccounts[platform as keyof typeof settings.connectedAccounts];
+            const connectedAccounts = settings?.connectedAccounts || {};
+            const account = connectedAccounts[platform as keyof typeof connectedAccounts];
             return (
               <div key={platform} className="flex items-center justify-between">
                 <div>

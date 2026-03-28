@@ -12,7 +12,19 @@ export async function GET() {
 
     if (error && error.code !== 'PGRST116') throw error
 
-    return NextResponse.json(data || {})
+    // Return default structure if no settings exist
+    const defaultSettings = {
+      autoPost: false,
+      maxPostsPerDay: 5,
+      connectedAccounts: {
+        youtube: { connected: false },
+        twitter: { connected: false },
+        instagram: { connected: false },
+        linkedin: { connected: false },
+      },
+    }
+
+    return NextResponse.json(data ? { ...defaultSettings, ...data } : defaultSettings)
   } catch (error) {
     console.error('Settings API error:', error)
     return NextResponse.json(
