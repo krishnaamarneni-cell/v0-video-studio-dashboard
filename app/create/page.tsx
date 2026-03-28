@@ -1,13 +1,24 @@
 'use client';
 
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import Link from 'next/link';
+
+interface MonitoredAccount {
+  id: string;
+  username: string;
+  enabled: boolean;
+  last_checked_at: string | null;
+  reels_found: number;
+  reels_posted: number;
+  auto_post_instagram: boolean;
+  auto_post_youtube: boolean;
+}
 
 export default function CreatePostPage() {
   // Form state
   const [text, setText] = useState('');
   const [imageUrl, setImageUrl] = useState('');
-  const [contentType, setContentType] = useState<'image' | 'reel'>('image');
+  const [contentType, setContentType] = useState<'image' | 'reel' | 'auto'>('image');
   const [platforms, setPlatforms] = useState({
     instagram: true,
     linkedin: true,
@@ -25,9 +36,109 @@ export default function CreatePostPage() {
   const [isScheduling, setIsScheduling] = useState(false);
   const [message, setMessage] = useState<{ type: 'success' | 'error'; text: string } | null>(null);
 
+  // Auto-Follow Monitor state
+  const [accounts, setAccounts] = useState<MonitoredAccount[]>([]);
+  const [newUsername, setNewUsername] = useState('');
+  const [isLoading, setIsLoading] = useState(false);
+  const [isAdding, setIsAdding] = useState(false);
+
   // AI generation prompts
   const [textTopic, setTextTopic] = useState('');
   const [imagePrompt, setImagePrompt] = useState('');
+
+  // Fetch monitored accounts on mount
+  useEffect(() => {
+    if (contentType === 'auto') {
+      fetchAccounts();
+    }
+  }, [contentType]);
+
+  const fetchAccounts = async () => {
+    setIsLoading(true);
+    try {
+      const response = await fetch('/api/social/monitor');
+      const data = await response.json();
+      if (data.accounts) {
+        setAccounts(data.accounts);
+      }
+    } catch (error) {
+      setMessage({ type: 'error', text: 'Failed to fetch monitored accounts' });
+    } finally {
+      setIsLoading(false);
+    }
+  };
+
+  const handleAddAccount = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!newUsername.trim()) {
+      setMessage({ type: 'error', text: 'Please enter an Instagram username' });
+      return;
+    }
+
+    setIsAdding(true);
+    setMessage(null);
+
+    try {
+      const response = await fetch('/api/social/monitor', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ username: newUsername.replace(/^@/, '').trim() }),
+      });
+
+      const data = await response.json();
+
+      if (data.error) {
+        setMessage({ type: 'error', text: data.error });
+      } else {
+        setMessage({ type: 'success', text: 'Account added successfully!' });
+        setNewUsername('');
+        await fetchAccounts();
+      }
+    } catch (error) {
+      setMessage({ type: 'error', text: 'Failed to add account' });
+    } finally {
+      setIsAdding(false);
+    }
+  };
+
+  const handleToggleAccount = async (id: string, field: 'enabled' | 'auto_post_instagram' | 'auto_post_youtube', value: boolean) => {
+    try {
+      const response = await fetch('/api/social/monitor', {
+        method: 'PATCH',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ id, [field]: value }),
+      });
+
+      const data = await response.json();
+
+      if (data.error) {
+        setMessage({ type: 'error', text: data.error });
+      } else {
+        await fetchAccounts();
+      }
+    } catch (error) {
+      setMessage({ type: 'error', text: 'Failed to update account' });
+    }
+  };
+
+  const handleRemoveAccount = async (id: string) => {
+    try {
+      const response = await fetch(`/api/social/monitor?id=${id}`, {
+        method: 'DELETE',
+      });
+
+      const data = await response.json();
+
+      if (data.error) {
+        setMessage({ type: 'error', text: data.error });
+      } else {
+        setMessage({ type: 'success', text: 'Account removed' });
+        await fetchAccounts();
+      }
+    } catch (error) {
+      setMessage({ type: 'error', text: 'Failed to remove account' });
+    }
+  };
 
   // Generate text with AI
   const handleGenerateText = async () => {
@@ -353,6 +464,7 @@ export default function CreatePostPage() {
     setReelUrl('');
     setScheduleDate('');
     setScheduleTime('');
+    setNewUsername('');
     setContentType('image');
   };
 
@@ -402,6 +514,15 @@ export default function CreatePostPage() {
                 }`}
             >
               🎬 Reel / Video
+            </button>
+            <button
+              onClick={() => setContentType('auto')}
+              className={`px-6 py-3 rounded-lg font-medium transition-colors ${contentType === 'auto'
+                ? 'bg-blue-600 text-white'
+                : 'bg-gray-800 text-gray-300 hover:bg-gray-700'
+                }`}
+            >
+              🔄 Auto-Follow
             </button>
           </div>
         </div>
@@ -498,8 +619,122 @@ export default function CreatePostPage() {
               </div>
             </div>
 
-            {/* Image Section (only for image posts) */}
-            {contentType === 'image' && (
+            {/* ============================================ */}
+            {/* AUTO-FOLLOW SECTION */}
+            {/* ============================================ */}
+            {contentType === 'auto' && (
+              <div className="space-y-6">
+                {/* Add Account Section */}
+                <div className="bg-blue-900/30 border border-blue-700 rounded-lg p-6">
+                  <h2 className="text-lg font-medium mb-4">➕ Add Account to Monitor</h2>
+                  <form onSubmit={handleAddAccount} className="flex gap-2">
+                    <div className="flex-1 relative">
+                      <span className="absolute left-3 top-3 text-gray-400">@</span>
+                      <input
+                        type="text"
+                        value={newUsername}
+                        onChange={(e) => setNewUsername(e.target.value)}
+                        placeholder="username"
+                        className="w-full bg-gray-700 border border-gray-600 rounded-lg px-8 py-2 text-white placeholder-gray-400 focus:outline-none focus:border-blue-500"
+                      />
+                    </div>
+                    <button
+                      type="submit"
+                      disabled={isAdding}
+                      className="px-6 py-2 bg-blue-600 hover:bg-blue-700 disabled:bg-blue-800 disabled:cursor-not-allowed rounded-lg font-medium transition-colors whitespace-nowrap"
+                    >
+                      {isAdding ? '⏳' : '➕ Add'}
+                    </button>
+                  </form>
+                </div>
+
+                {/* Monitored Accounts List */}
+                <div className="bg-gray-800 rounded-lg p-6">
+                  <h2 className="text-lg font-medium mb-4">📊 Monitored Accounts</h2>
+
+                  {isLoading ? (
+                    <div className="text-gray-400 text-center py-8">Loading accounts...</div>
+                  ) : accounts.length === 0 ? (
+                    <div className="text-gray-400 text-center py-8">No accounts monitored yet. Add one above!</div>
+                  ) : (
+                    <div className="space-y-3">
+                      {accounts.map((account) => (
+                        <div key={account.id} className="bg-gray-700 rounded-lg p-4">
+                          <div className="flex items-start justify-between mb-3">
+                            <div className="flex-1">
+                              <div className="flex items-center gap-2 mb-1">
+                                <span className="font-medium">@{account.username}</span>
+                                <span className={`px-2 py-1 rounded text-xs font-medium ${
+                                  account.enabled
+                                    ? 'bg-green-900/50 text-green-300'
+                                    : 'bg-gray-600 text-gray-300'
+                                }`}>
+                                  {account.enabled ? '✓ Active' : '⊘ Paused'}
+                                </span>
+                              </div>
+                              <div className="text-xs text-gray-400 space-y-1">
+                                <div>Last checked: {account.last_checked_at ? new Date(account.last_checked_at).toLocaleString() : 'Never'}</div>
+                                <div>Reels found: {account.reels_found} | Posted: {account.reels_posted}</div>
+                              </div>
+                            </div>
+                            <button
+                              onClick={() => handleRemoveAccount(account.id)}
+                              className="text-red-400 hover:text-red-300 text-sm"
+                            >
+                              ✕
+                            </button>
+                          </div>
+
+                          {/* Auto-post toggles */}
+                          <div className="space-y-2 border-t border-gray-600 pt-3">
+                            <label className="flex items-center gap-2 cursor-pointer text-sm">
+                              <input
+                                type="checkbox"
+                                checked={account.auto_post_instagram}
+                                onChange={(e) => handleToggleAccount(account.id, 'auto_post_instagram', e.target.checked)}
+                                className="w-4 h-4 rounded border-gray-600 bg-gray-600 text-pink-500"
+                              />
+                              <span>Auto-post to Instagram</span>
+                            </label>
+                            <label className="flex items-center gap-2 cursor-pointer text-sm">
+                              <input
+                                type="checkbox"
+                                checked={account.auto_post_youtube}
+                                onChange={(e) => handleToggleAccount(account.id, 'auto_post_youtube', e.target.checked)}
+                                className="w-4 h-4 rounded border-gray-600 bg-gray-600 text-red-500"
+                              />
+                              <span>Auto-post to YouTube</span>
+                            </label>
+                          </div>
+
+                          {/* Pause/Resume button */}
+                          <button
+                            onClick={() => handleToggleAccount(account.id, 'enabled', !account.enabled)}
+                            className="w-full mt-3 px-3 py-2 text-sm rounded-lg font-medium transition-colors bg-gray-600 hover:bg-gray-500"
+                          >
+                            {account.enabled ? '⏸ Pause' : '▶ Resume'}
+                          </button>
+                        </div>
+                      ))}
+                    </div>
+                  )}
+                </div>
+
+                {/* How It Works */}
+                <div className="bg-blue-900/20 border border-blue-700/50 rounded-lg p-6">
+                  <h3 className="text-blue-300 font-medium mb-3">📋 How Auto-Follow Works:</h3>
+                  <ol className="text-sm text-gray-400 space-y-2 list-decimal list-inside">
+                    <li>Add Instagram accounts to monitor above</li>
+                    <li>Your local Python script checks for new reels every hour</li>
+                    <li>Downloads new reels automatically</li>
+                    <li>Generates AI caption with "Follow @wealthclaude"</li>
+                    <li>Posts to Instagram & YouTube (if enabled)</li>
+                    <li>Automatically deletes from cloud storage after 24 hours</li>
+                  </ol>
+                </div>
+              </div>
+            )}
+
               <div className="bg-gray-800 rounded-lg p-6">
                 <h2 className="text-lg font-medium mb-4">🖼️ Image</h2>
 
