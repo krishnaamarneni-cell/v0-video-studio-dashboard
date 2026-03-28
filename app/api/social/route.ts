@@ -1,10 +1,14 @@
-import { createClient } from "@/utils/supabase/server";
+import { createClient } from "@supabase/supabase-js";
 import { NextResponse } from "next/server";
+
+// Initialize Supabase client
+const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL!;
+const supabaseKey = process.env.SUPABASE_SERVICE_ROLE_KEY || process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!;
+const supabase = createClient(supabaseUrl, supabaseKey);
 
 // GET - Fetch social posts
 export async function GET(request: Request) {
   try {
-    const supabase = await createClient();
     const { searchParams } = new URL(request.url);
 
     const status = searchParams.get("status");
@@ -35,7 +39,6 @@ export async function GET(request: Request) {
 // POST - Create new social post
 export async function POST(request: Request) {
   try {
-    const supabase = await createClient();
     const body = await request.json();
 
     const {
@@ -48,7 +51,7 @@ export async function POST(request: Request) {
       scheduled_for,
     } = body;
 
-    // Validation - but allow empty text_content for reels (AI will generate)
+    // Validation - allow empty text_content for reels (AI will generate)
     if (content_type === "image" && !text_content?.trim()) {
       return NextResponse.json(
         { error: "text_content is required for image posts" },
@@ -107,7 +110,6 @@ export async function POST(request: Request) {
 // PATCH - Update a social post
 export async function PATCH(request: Request) {
   try {
-    const supabase = await createClient();
     const body = await request.json();
 
     const { id, ...updates } = body;
@@ -139,7 +141,6 @@ export async function PATCH(request: Request) {
 // DELETE - Delete a social post
 export async function DELETE(request: Request) {
   try {
-    const supabase = await createClient();
     const { searchParams } = new URL(request.url);
     const id = searchParams.get("id");
 
