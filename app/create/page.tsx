@@ -735,6 +735,8 @@ export default function CreatePostPage() {
               </div>
             )}
 
+            {/* Image Section (only for image posts) */}
+            {contentType === 'image' && (
               <div className="bg-gray-800 rounded-lg p-6">
                 <h2 className="text-lg font-medium mb-4">🖼️ Image</h2>
 
@@ -812,6 +814,7 @@ export default function CreatePostPage() {
                 )}
               </div>
             )}
+
           </div>
 
           {/* Right Column - Settings & Actions */}
