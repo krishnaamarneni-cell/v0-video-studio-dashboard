@@ -6,7 +6,7 @@ const MAKE_WEBHOOK_URL = process.env.MAKE_WEBHOOK_URL || "https://hook.us2.make.
 export async function POST(request: Request) {
   try {
     const body = await request.json();
-    const { text, image_url, video_url, platforms, content_type } = body;
+    const { text, image_url, video_url, platforms, content_type, platform } = body;
 
     if (!text) {
       return NextResponse.json({ error: "Caption/text is required" }, { status: 400 });
@@ -21,13 +21,24 @@ export async function POST(request: Request) {
     }
 
     const results: Record<string, any> = {};
-    const platformList = platforms || ["instagram", "linkedin"];
+
+    // Handle platform selection
+    let platformList: string[] = [];
+    if (platforms && Array.isArray(platforms)) {
+      platformList = platforms;
+    } else if (platform === "both") {
+      platformList = ["instagram", "linkedin"];
+    } else if (platform) {
+      platformList = [platform];
+    } else {
+      platformList = ["instagram", "linkedin"];
+    }
 
     // Send to Make.com for each platform
-    for (const platform of platformList) {
+    for (const plat of platformList) {
       try {
         const payload = {
-          platform,
+          platform: plat,
           content_type: content_type || "image",
           text,
           image_url: content_type === "image" ? image_url : null,
@@ -43,12 +54,12 @@ export async function POST(request: Request) {
 
         const responseText = await response.text();
 
-        results[platform] = {
+        results[plat] = {
           success: response.ok || responseText === "Accepted",
           response: responseText
         };
       } catch (error: any) {
-        results[platform] = {
+        results[plat] = {
           success: false,
           error: error.message
         };
