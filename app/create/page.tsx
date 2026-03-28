@@ -1,707 +1,482 @@
-// app/create/page.tsx
-// Create Post page for social media content creation
+'use client';
 
-'use client'
-
-import { useState, useCallback } from 'react'
-import { Button } from '@/components/ui/button'
-import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card'
-import { Textarea } from '@/components/ui/textarea'
-import { Input } from '@/components/ui/input'
-import { Label } from '@/components/ui/label'
-import { Switch } from '@/components/ui/switch'
-import { Badge } from '@/components/ui/badge'
-import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs'
-import { 
-  Twitter, 
-  Instagram, 
-  Linkedin, 
-  Youtube,
-  Image as ImageIcon,
-  Video,
-  Type,
-  Sparkles,
-  Upload,
-  Link,
-  Calendar,
-  Send,
-  Loader2,
-  X,
-  RefreshCw
-} from 'lucide-react'
-
-// Platform config
-const PLATFORMS = [
-  { id: 'twitter', name: 'Twitter/X', icon: Twitter, color: 'bg-black' },
-  { id: 'instagram', name: 'Instagram', icon: Instagram, color: 'bg-gradient-to-r from-purple-500 to-pink-500' },
-  { id: 'linkedin', name: 'LinkedIn', icon: Linkedin, color: 'bg-blue-600' },
-  { id: 'youtube', name: 'YouTube', icon: Youtube, color: 'bg-red-600' },
-]
-
-// Template config
-const TEMPLATES = [
-  { id: 'professional', name: 'Professional', description: 'Clean corporate style' },
-  { id: 'quote_card', name: 'Quote Card', description: 'Text on branded background' },
-  { id: 'breaking_news', name: 'Breaking News', description: 'Urgent news style' },
-  { id: 'meme', name: 'Meme', description: 'Casual/viral style' },
-]
+import { useState } from 'react';
+import Link from 'next/link';
 
 export default function CreatePostPage() {
-  // Content state
-  const [contentType, setContentType] = useState<'text' | 'image' | 'video'>('text')
-  const [textContent, setTextContent] = useState('')
-  const [textSource, setTextSource] = useState<'manual' | 'ai'>('manual')
-  const [aiTextPrompt, setAiTextPrompt] = useState('')
-  
-  // Media state
-  const [mediaSource, setMediaSource] = useState<'upload' | 'ai' | 'url'>('ai')
-  const [mediaUrl, setMediaUrl] = useState('')
-  const [aiImagePrompt, setAiImagePrompt] = useState('')
-  const [videoUrl, setVideoUrl] = useState('')
-  const [generatedImageUrl, setGeneratedImageUrl] = useState('')
-  
-  // Template & Platform state
-  const [template, setTemplate] = useState('professional')
-  const [selectedPlatforms, setSelectedPlatforms] = useState<string[]>(['twitter'])
-  
-  // Hashtags state
-  const [hashtags, setHashtags] = useState<string[]>([])
-  const [autoHashtags, setAutoHashtags] = useState(true)
-  const [newHashtag, setNewHashtag] = useState('')
-  
-  // Scheduling state
-  const [scheduleType, setScheduleType] = useState<'now' | 'schedule'>('now')
-  const [scheduledDate, setScheduledDate] = useState('')
-  const [scheduledTime, setScheduledTime] = useState('')
-  
-  // Branding state
-  const [includeBranding, setIncludeBranding] = useState(true)
-  
+  // Form state
+  const [text, setText] = useState('');
+  const [imageUrl, setImageUrl] = useState('');
+  const [platforms, setPlatforms] = useState({
+    instagram: true,
+    linkedin: true,
+  });
+  const [scheduleDate, setScheduleDate] = useState('');
+  const [scheduleTime, setScheduleTime] = useState('');
+
   // UI state
-  const [isGeneratingText, setIsGeneratingText] = useState(false)
-  const [isGeneratingImage, setIsGeneratingImage] = useState(false)
-  const [isGeneratingHashtags, setIsGeneratingHashtags] = useState(false)
-  const [isSubmitting, setIsSubmitting] = useState(false)
-  const [error, setError] = useState('')
-  const [success, setSuccess] = useState('')
-  
-  // Toggle platform selection
-  const togglePlatform = (platformId: string) => {
-    setSelectedPlatforms(prev => 
-      prev.includes(platformId)
-        ? prev.filter(p => p !== platformId)
-        : [...prev, platformId]
-    )
-  }
-  
+  const [isGeneratingText, setIsGeneratingText] = useState(false);
+  const [isGeneratingImage, setIsGeneratingImage] = useState(false);
+  const [isPosting, setIsPosting] = useState(false);
+  const [isScheduling, setIsScheduling] = useState(false);
+  const [message, setMessage] = useState<{ type: 'success' | 'error'; text: string } | null>(null);
+
+  // AI generation prompts
+  const [textTopic, setTextTopic] = useState('');
+  const [imagePrompt, setImagePrompt] = useState('');
+
   // Generate text with AI
-  const generateText = async () => {
-    if (!aiTextPrompt.trim()) {
-      setError('Please enter a prompt for AI text generation')
-      return
+  const handleGenerateText = async () => {
+    if (!textTopic.trim()) {
+      setMessage({ type: 'error', text: 'Please enter a topic for AI to write about' });
+      return;
     }
-    
-    setIsGeneratingText(true)
-    setError('')
-    
+
+    setIsGeneratingText(true);
+    setMessage(null);
+
     try {
       const response = await fetch('/api/social/generate', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
           type: 'text',
-          prompt: aiTextPrompt,
-          template
-        })
-      })
-      
-      const data = await response.json()
-      
-      if (data.success && data.text) {
-        setTextContent(data.text)
-        setTextSource('ai')
+          prompt: textTopic,
+        }),
+      });
+
+      const data = await response.json();
+
+      if (data.error) {
+        setMessage({ type: 'error', text: data.error });
       } else {
-        setError(data.error || 'Failed to generate text')
+        setText(data.text);
+        setMessage({ type: 'success', text: 'Text generated successfully!' });
       }
-    } catch (err) {
-      setError('Failed to generate text. Please try again.')
+    } catch (error) {
+      setMessage({ type: 'error', text: 'Failed to generate text' });
     } finally {
-      setIsGeneratingText(false)
+      setIsGeneratingText(false);
     }
-  }
-  
+  };
+
   // Generate image with AI
-  const generateImage = async () => {
-    const prompt = aiImagePrompt.trim() || textContent.trim()
-    if (!prompt) {
-      setError('Please enter a prompt or text content for image generation')
-      return
+  const handleGenerateImage = async () => {
+    if (!imagePrompt.trim()) {
+      setMessage({ type: 'error', text: 'Please enter a prompt for image generation' });
+      return;
     }
-    
-    setIsGeneratingImage(true)
-    setError('')
-    
+
+    setIsGeneratingImage(true);
+    setMessage(null);
+
     try {
       const response = await fetch('/api/social/generate', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
           type: 'image',
-          prompt: aiImagePrompt || textContent,
-          template,
-          platform: selectedPlatforms[0] || 'twitter'
-        })
-      })
-      
-      const data = await response.json()
-      
-      if (data.success && data.imageUrl) {
-        setGeneratedImageUrl(data.imageUrl)
-        setMediaUrl(data.imageUrl)
-        setMediaSource('ai')
+          prompt: imagePrompt,
+        }),
+      });
+
+      const data = await response.json();
+
+      if (data.error) {
+        setMessage({ type: 'error', text: data.error });
       } else {
-        setError(data.error || 'Failed to generate image')
+        setImageUrl(data.image_url);
+        setMessage({ type: 'success', text: 'Image generated successfully!' });
       }
-    } catch (err) {
-      setError('Failed to generate image. Please try again.')
+    } catch (error) {
+      setMessage({ type: 'error', text: 'Failed to generate image' });
     } finally {
-      setIsGeneratingImage(false)
+      setIsGeneratingImage(false);
     }
-  }
-  
-  // Generate hashtags with AI
-  const generateHashtags = async () => {
-    if (!textContent.trim()) {
-      setError('Please enter text content first to generate hashtags')
-      return
+  };
+
+  // Post immediately via Make.com
+  const handlePostNow = async () => {
+    if (!text.trim()) {
+      setMessage({ type: 'error', text: 'Please enter post text' });
+      return;
     }
-    
-    setIsGeneratingHashtags(true)
-    setError('')
-    
+
+    if (!platforms.instagram && !platforms.linkedin) {
+      setMessage({ type: 'error', text: 'Please select at least one platform' });
+      return;
+    }
+
+    // Instagram requires an image
+    if (platforms.instagram && !imageUrl.trim()) {
+      setMessage({ type: 'error', text: 'Instagram requires an image. Please add an image URL or generate one.' });
+      return;
+    }
+
+    setIsPosting(true);
+    setMessage(null);
+
     try {
-      const response = await fetch('/api/social/generate', {
+      const platformList = [];
+      if (platforms.instagram) platformList.push('instagram');
+      if (platforms.linkedin) platformList.push('linkedin');
+
+      const response = await fetch('/api/social/post', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
-          type: 'hashtags',
-          prompt: textContent
-        })
-      })
-      
-      const data = await response.json()
-      
-      if (data.success && data.hashtags) {
-        setHashtags(data.hashtags)
+          platform: platformList.length === 2 ? 'both' : platformList[0],
+          text: text,
+          image_url: imageUrl || null,
+        }),
+      });
+
+      const data = await response.json();
+
+      if (data.error) {
+        setMessage({ type: 'error', text: data.error });
       } else {
-        setError(data.error || 'Failed to generate hashtags')
+        setMessage({ type: 'success', text: '🎉 Posted successfully to ' + platformList.join(' & ') + '!' });
+        // Clear form after successful post
+        setText('');
+        setImageUrl('');
+        setTextTopic('');
+        setImagePrompt('');
       }
-    } catch (err) {
-      setError('Failed to generate hashtags. Please try again.')
+    } catch (error) {
+      setMessage({ type: 'error', text: 'Failed to post. Please try again.' });
     } finally {
-      setIsGeneratingHashtags(false)
+      setIsPosting(false);
     }
-  }
-  
-  // Add manual hashtag
-  const addHashtag = () => {
-    if (newHashtag.trim() && !hashtags.includes(newHashtag.trim())) {
-      setHashtags([...hashtags, newHashtag.trim().replace('#', '')])
-      setNewHashtag('')
+  };
+
+  // Schedule for later (saves to Supabase)
+  const handleSchedule = async () => {
+    if (!text.trim()) {
+      setMessage({ type: 'error', text: 'Please enter post text' });
+      return;
     }
-  }
-  
-  // Remove hashtag
-  const removeHashtag = (tag: string) => {
-    setHashtags(hashtags.filter(h => h !== tag))
-  }
-  
-  // Submit post
-  const submitPost = async () => {
-    if (!textContent.trim() && contentType === 'text') {
-      setError('Please enter post content')
-      return
+
+    if (!platforms.instagram && !platforms.linkedin) {
+      setMessage({ type: 'error', text: 'Please select at least one platform' });
+      return;
     }
-    
-    if (selectedPlatforms.length === 0) {
-      setError('Please select at least one platform')
-      return
+
+    if (platforms.instagram && !imageUrl.trim()) {
+      setMessage({ type: 'error', text: 'Instagram requires an image. Please add an image URL or generate one.' });
+      return;
     }
-    
-    setIsSubmitting(true)
-    setError('')
-    setSuccess('')
-    
+
+    setIsScheduling(true);
+    setMessage(null);
+
     try {
-      // Build scheduled time if applicable
-      let scheduledFor = null
-      if (scheduleType === 'schedule' && scheduledDate && scheduledTime) {
-        scheduledFor = new Date(`${scheduledDate}T${scheduledTime}`).toISOString()
+      const platformList = [];
+      if (platforms.instagram) platformList.push('instagram');
+      if (platforms.linkedin) platformList.push('linkedin');
+
+      // Build scheduled_for timestamp
+      let scheduledFor = null;
+      if (scheduleDate && scheduleTime) {
+        scheduledFor = new Date(`${scheduleDate}T${scheduleTime}`).toISOString();
       }
-      
-      const postData = {
-        contentType: contentType === 'text' && (mediaUrl || generatedImageUrl) ? 'image_text' : contentType,
-        textContent,
-        textSource,
-        aiTextPrompt: textSource === 'ai' ? aiTextPrompt : null,
-        mediaUrl: mediaUrl || generatedImageUrl,
-        mediaType: contentType === 'video' ? 'video' : 'image',
-        mediaSource,
-        videoUrl: contentType === 'video' ? videoUrl : null,
-        aiImagePrompt: mediaSource === 'ai' ? aiImagePrompt : null,
-        templateType: template,
-        includeBranding,
-        platforms: selectedPlatforms,
-        scheduledFor,
-        hashtags,
-        autoHashtags,
-        postNow: scheduleType === 'now'
-      }
-      
+
       const response = await fetch('/api/social', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify(postData)
-      })
-      
-      const data = await response.json()
-      
-      if (data.post) {
-        setSuccess(scheduleType === 'now' 
-          ? 'Post submitted! It will be posted shortly.'
-          : `Post scheduled for ${new Date(scheduledFor!).toLocaleString()}`
-        )
-        // Reset form
-        resetForm()
+        body: JSON.stringify({
+          text_content: text,
+          media_url: imageUrl || null,
+          platforms: platformList,
+          status: 'pending_approval',
+          content_type: imageUrl ? 'image' : 'text',
+          scheduled_for: scheduledFor,
+        }),
+      });
+
+      const data = await response.json();
+
+      if (data.error) {
+        setMessage({ type: 'error', text: data.error });
       } else {
-        setError(data.error || 'Failed to create post')
+        setMessage({ type: 'success', text: '📅 Post scheduled successfully!' });
+        // Clear form
+        setText('');
+        setImageUrl('');
+        setTextTopic('');
+        setImagePrompt('');
+        setScheduleDate('');
+        setScheduleTime('');
       }
-    } catch (err) {
-      setError('Failed to create post. Please try again.')
+    } catch (error) {
+      setMessage({ type: 'error', text: 'Failed to schedule post' });
     } finally {
-      setIsSubmitting(false)
+      setIsScheduling(false);
     }
-  }
-  
-  // Reset form
-  const resetForm = () => {
-    setTextContent('')
-    setAiTextPrompt('')
-    setMediaUrl('')
-    setAiImagePrompt('')
-    setVideoUrl('')
-    setGeneratedImageUrl('')
-    setHashtags([])
-  }
-  
+  };
+
   return (
-    <div className="p-6 max-w-4xl mx-auto">
-      <div className="mb-6">
-        <h1 className="text-3xl font-bold">Create Post</h1>
-        <p className="text-muted-foreground">Create and schedule social media content</p>
-      </div>
-      
-      {/* Error/Success Messages */}
-      {error && (
-        <div className="mb-4 p-4 bg-red-50 border border-red-200 rounded-lg text-red-700">
-          {error}
+    <div className="min-h-screen bg-gray-900 text-white">
+      {/* Header */}
+      <header className="border-b border-gray-800 px-6 py-4">
+        <div className="flex items-center justify-between">
+          <div className="flex items-center gap-4">
+            <Link href="/" className="text-gray-400 hover:text-white">
+              ← Back
+            </Link>
+            <h1 className="text-xl font-semibold">Create Post</h1>
+          </div>
+          <div className="flex items-center gap-2">
+            <span className="text-green-400 text-sm">● Make.com Connected</span>
+          </div>
         </div>
-      )}
-      {success && (
-        <div className="mb-4 p-4 bg-green-50 border border-green-200 rounded-lg text-green-700">
-          {success}
-        </div>
-      )}
-      
-      <div className="grid gap-6">
-        {/* Platform Selection */}
-        <Card>
-          <CardHeader>
-            <CardTitle>Platforms</CardTitle>
-            <CardDescription>Select where to post</CardDescription>
-          </CardHeader>
-          <CardContent>
-            <div className="flex flex-wrap gap-3">
-              {PLATFORMS.map(platform => (
-                <Button
-                  key={platform.id}
-                  variant={selectedPlatforms.includes(platform.id) ? 'default' : 'outline'}
-                  className={`gap-2 ${selectedPlatforms.includes(platform.id) ? platform.color : ''}`}
-                  onClick={() => togglePlatform(platform.id)}
-                >
-                  <platform.icon className="h-4 w-4" />
-                  {platform.name}
-                </Button>
-              ))}
-            </div>
-          </CardContent>
-        </Card>
-        
-        {/* Content Type */}
-        <Card>
-          <CardHeader>
-            <CardTitle>Content Type</CardTitle>
-          </CardHeader>
-          <CardContent>
-            <Tabs value={contentType} onValueChange={(v) => setContentType(v as any)}>
-              <TabsList className="grid w-full grid-cols-3">
-                <TabsTrigger value="text" className="gap-2">
-                  <Type className="h-4 w-4" />
-                  Text
-                </TabsTrigger>
-                <TabsTrigger value="image" className="gap-2">
-                  <ImageIcon className="h-4 w-4" />
-                  Image
-                </TabsTrigger>
-                <TabsTrigger value="video" className="gap-2">
-                  <Video className="h-4 w-4" />
-                  Video
-                </TabsTrigger>
-              </TabsList>
-            </Tabs>
-          </CardContent>
-        </Card>
-        
-        {/* Template Selection */}
-        <Card>
-          <CardHeader>
-            <CardTitle>Style Template</CardTitle>
-            <CardDescription>Choose a content style</CardDescription>
-          </CardHeader>
-          <CardContent>
-            <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
-              {TEMPLATES.map(t => (
-                <Button
-                  key={t.id}
-                  variant={template === t.id ? 'default' : 'outline'}
-                  className="h-auto flex-col py-4"
-                  onClick={() => setTemplate(t.id)}
-                >
-                  <span className="font-medium">{t.name}</span>
-                  <span className="text-xs text-muted-foreground">{t.description}</span>
-                </Button>
-              ))}
-            </div>
-          </CardContent>
-        </Card>
-        
-        {/* Text Content */}
-        <Card>
-          <CardHeader>
-            <CardTitle className="flex items-center justify-between">
-              <span>Text Content</span>
-              <Button 
-                variant="outline" 
-                size="sm"
-                onClick={generateText}
-                disabled={isGeneratingText}
-                className="gap-2"
-              >
-                {isGeneratingText ? (
-                  <Loader2 className="h-4 w-4 animate-spin" />
-                ) : (
-                  <Sparkles className="h-4 w-4" />
-                )}
-                Generate with AI
-              </Button>
-            </CardTitle>
-          </CardHeader>
-          <CardContent className="space-y-4">
-            {/* AI Prompt */}
-            <div>
-              <Label>AI Prompt (optional)</Label>
-              <Input
-                placeholder="e.g., Write a tip about saving money..."
-                value={aiTextPrompt}
-                onChange={(e) => setAiTextPrompt(e.target.value)}
-              />
-            </div>
-            
-            {/* Text Content */}
-            <div>
-              <Label>Post Text</Label>
-              <Textarea
-                placeholder="Write your post content here..."
-                value={textContent}
-                onChange={(e) => {
-                  setTextContent(e.target.value)
-                  setTextSource('manual')
-                }}
-                rows={4}
-              />
-              <div className="text-xs text-muted-foreground mt-1">
-                {textContent.length} / 280 characters (Twitter limit)
-              </div>
-            </div>
-          </CardContent>
-        </Card>
-        
-        {/* Image/Video Content */}
-        {(contentType === 'image' || contentType === 'video') && (
-          <Card>
-            <CardHeader>
-              <CardTitle>
-                {contentType === 'image' ? 'Image' : 'Video'}
-              </CardTitle>
-            </CardHeader>
-            <CardContent className="space-y-4">
-              {contentType === 'image' && (
-                <>
-                  {/* Image Source Selection */}
-                  <div className="flex gap-2">
-                    <Button
-                      variant={mediaSource === 'ai' ? 'default' : 'outline'}
-                      size="sm"
-                      onClick={() => setMediaSource('ai')}
-                      className="gap-2"
-                    >
-                      <Sparkles className="h-4 w-4" />
-                      AI Generate
-                    </Button>
-                    <Button
-                      variant={mediaSource === 'upload' ? 'default' : 'outline'}
-                      size="sm"
-                      onClick={() => setMediaSource('upload')}
-                      className="gap-2"
-                    >
-                      <Upload className="h-4 w-4" />
-                      Upload
-                    </Button>
-                    <Button
-                      variant={mediaSource === 'url' ? 'default' : 'outline'}
-                      size="sm"
-                      onClick={() => setMediaSource('url')}
-                      className="gap-2"
-                    >
-                      <Link className="h-4 w-4" />
-                      URL
-                    </Button>
-                  </div>
-                  
-                  {/* AI Image Generation */}
-                  {mediaSource === 'ai' && (
-                    <div className="space-y-3">
-                      <Input
-                        placeholder="Describe the image you want to generate..."
-                        value={aiImagePrompt}
-                        onChange={(e) => setAiImagePrompt(e.target.value)}
-                      />
-                      <Button 
-                        onClick={generateImage} 
-                        disabled={isGeneratingImage}
-                        className="gap-2"
-                      >
-                        {isGeneratingImage ? (
-                          <>
-                            <Loader2 className="h-4 w-4 animate-spin" />
-                            Generating...
-                          </>
-                        ) : (
-                          <>
-                            <Sparkles className="h-4 w-4" />
-                            Generate Image
-                          </>
-                        )}
-                      </Button>
-                    </div>
-                  )}
-                  
-                  {/* URL Input */}
-                  {mediaSource === 'url' && (
-                    <Input
-                      placeholder="Enter image URL..."
-                      value={mediaUrl}
-                      onChange={(e) => setMediaUrl(e.target.value)}
-                    />
-                  )}
-                  
-                  {/* Image Preview */}
-                  {(generatedImageUrl || mediaUrl) && (
-                    <div className="mt-4">
-                      <Label>Preview</Label>
-                      <div className="mt-2 relative">
-                        <img 
-                          src={generatedImageUrl || mediaUrl} 
-                          alt="Preview" 
-                          className="max-w-full h-auto rounded-lg border"
-                        />
-                        <Button
-                          variant="destructive"
-                          size="icon"
-                          className="absolute top-2 right-2"
-                          onClick={() => {
-                            setGeneratedImageUrl('')
-                            setMediaUrl('')
-                          }}
-                        >
-                          <X className="h-4 w-4" />
-                        </Button>
-                      </div>
-                    </div>
-                  )}
-                </>
-              )}
-              
-              {contentType === 'video' && (
-                <div>
-                  <Label>Video URL (YouTube, etc.)</Label>
-                  <Input
-                    placeholder="https://youtube.com/watch?v=..."
-                    value={videoUrl}
-                    onChange={(e) => setVideoUrl(e.target.value)}
-                  />
-                </div>
-              )}
-            </CardContent>
-          </Card>
+      </header>
+
+      <main className="max-w-4xl mx-auto px-6 py-8">
+        {/* Message */}
+        {message && (
+          <div className={`mb-6 p-4 rounded-lg ${message.type === 'success' ? 'bg-green-900/50 border border-green-700' : 'bg-red-900/50 border border-red-700'
+            }`}>
+            {message.text}
+          </div>
         )}
-        
-        {/* Hashtags */}
-        <Card>
-          <CardHeader>
-            <CardTitle className="flex items-center justify-between">
-              <span>Hashtags</span>
-              <Button 
-                variant="outline" 
-                size="sm"
-                onClick={generateHashtags}
-                disabled={isGeneratingHashtags}
-                className="gap-2"
-              >
-                {isGeneratingHashtags ? (
-                  <Loader2 className="h-4 w-4 animate-spin" />
-                ) : (
-                  <RefreshCw className="h-4 w-4" />
-                )}
-                Auto-generate
-              </Button>
-            </CardTitle>
-          </CardHeader>
-          <CardContent className="space-y-4">
-            {/* Hashtag Input */}
-            <div className="flex gap-2">
-              <Input
-                placeholder="Add hashtag..."
-                value={newHashtag}
-                onChange={(e) => setNewHashtag(e.target.value)}
-                onKeyPress={(e) => e.key === 'Enter' && addHashtag()}
-              />
-              <Button onClick={addHashtag}>Add</Button>
-            </div>
-            
-            {/* Hashtag List */}
-            <div className="flex flex-wrap gap-2">
-              {hashtags.map(tag => (
-                <Badge key={tag} variant="secondary" className="gap-1">
-                  #{tag}
-                  <X 
-                    className="h-3 w-3 cursor-pointer" 
-                    onClick={() => removeHashtag(tag)}
+
+        <div className="grid grid-cols-1 lg:grid-cols-2 gap-8">
+          {/* Left Column - Content Creation */}
+          <div className="space-y-6">
+            {/* Text Section */}
+            <div className="bg-gray-800 rounded-lg p-6">
+              <h2 className="text-lg font-medium mb-4">📝 Post Text</h2>
+
+              {/* AI Text Generation */}
+              <div className="mb-4">
+                <label className="block text-sm text-gray-400 mb-2">Generate with AI</label>
+                <div className="flex gap-2">
+                  <input
+                    type="text"
+                    value={textTopic}
+                    onChange={(e) => setTextTopic(e.target.value)}
+                    placeholder="Enter topic (e.g., 'investing tips for beginners')"
+                    className="flex-1 bg-gray-700 border border-gray-600 rounded-lg px-4 py-2 text-white placeholder-gray-400 focus:outline-none focus:border-green-500"
                   />
-                </Badge>
-              ))}
-            </div>
-          </CardContent>
-        </Card>
-        
-        {/* Scheduling */}
-        <Card>
-          <CardHeader>
-            <CardTitle>Schedule</CardTitle>
-          </CardHeader>
-          <CardContent className="space-y-4">
-            <div className="flex gap-3">
-              <Button
-                variant={scheduleType === 'now' ? 'default' : 'outline'}
-                onClick={() => setScheduleType('now')}
-                className="gap-2"
-              >
-                <Send className="h-4 w-4" />
-                Post Now
-              </Button>
-              <Button
-                variant={scheduleType === 'schedule' ? 'default' : 'outline'}
-                onClick={() => setScheduleType('schedule')}
-                className="gap-2"
-              >
-                <Calendar className="h-4 w-4" />
-                Schedule
-              </Button>
-            </div>
-            
-            {scheduleType === 'schedule' && (
-              <div className="flex gap-3">
-                <div className="flex-1">
-                  <Label>Date</Label>
-                  <Input
-                    type="date"
-                    value={scheduledDate}
-                    onChange={(e) => setScheduledDate(e.target.value)}
-                  />
-                </div>
-                <div className="flex-1">
-                  <Label>Time</Label>
-                  <Input
-                    type="time"
-                    value={scheduledTime}
-                    onChange={(e) => setScheduledTime(e.target.value)}
-                  />
+                  <button
+                    onClick={handleGenerateText}
+                    disabled={isGeneratingText}
+                    className="px-4 py-2 bg-purple-600 hover:bg-purple-700 disabled:bg-purple-800 disabled:cursor-not-allowed rounded-lg font-medium transition-colors whitespace-nowrap"
+                  >
+                    {isGeneratingText ? '⏳ Generating...' : '🤖 Generate'}
+                  </button>
                 </div>
               </div>
-            )}
-          </CardContent>
-        </Card>
-        
-        {/* Branding */}
-        <Card>
-          <CardHeader>
-            <CardTitle>Options</CardTitle>
-          </CardHeader>
-          <CardContent>
-            <div className="flex items-center justify-between">
+
+              {/* Manual Text Input */}
               <div>
-                <Label>Include WealthClaude Branding</Label>
-                <p className="text-sm text-muted-foreground">
-                  Add brand colors and style to generated images
-                </p>
+                <label className="block text-sm text-gray-400 mb-2">Or write manually</label>
+                <textarea
+                  value={text}
+                  onChange={(e) => setText(e.target.value)}
+                  placeholder="Write your post here..."
+                  rows={6}
+                  className="w-full bg-gray-700 border border-gray-600 rounded-lg px-4 py-3 text-white placeholder-gray-400 focus:outline-none focus:border-green-500 resize-none"
+                />
+                <div className="flex justify-between mt-2 text-sm text-gray-400">
+                  <span>{text.length} characters</span>
+                  <span>Max: 2,200 (Instagram) / 3,000 (LinkedIn)</span>
+                </div>
               </div>
-              <Switch
-                checked={includeBranding}
-                onCheckedChange={setIncludeBranding}
-              />
             </div>
-          </CardContent>
-        </Card>
-        
-        {/* Submit */}
-        <div className="flex justify-end gap-3">
-          <Button variant="outline" onClick={resetForm}>
-            Clear
-          </Button>
-          <Button 
-            onClick={submitPost} 
-            disabled={isSubmitting}
-            className="gap-2"
-          >
-            {isSubmitting ? (
-              <>
-                <Loader2 className="h-4 w-4 animate-spin" />
-                Creating...
-              </>
-            ) : scheduleType === 'now' ? (
-              <>
-                <Send className="h-4 w-4" />
-                Create & Post
-              </>
-            ) : (
-              <>
-                <Calendar className="h-4 w-4" />
-                Schedule Post
-              </>
-            )}
-          </Button>
+
+            {/* Image Section */}
+            <div className="bg-gray-800 rounded-lg p-6">
+              <h2 className="text-lg font-medium mb-4">🖼️ Image</h2>
+
+              {/* AI Image Generation */}
+              <div className="mb-4">
+                <label className="block text-sm text-gray-400 mb-2">Generate with AI</label>
+                <div className="flex gap-2">
+                  <input
+                    type="text"
+                    value={imagePrompt}
+                    onChange={(e) => setImagePrompt(e.target.value)}
+                    placeholder="Describe the image (e.g., 'professional finance infographic')"
+                    className="flex-1 bg-gray-700 border border-gray-600 rounded-lg px-4 py-2 text-white placeholder-gray-400 focus:outline-none focus:border-green-500"
+                  />
+                  <button
+                    onClick={handleGenerateImage}
+                    disabled={isGeneratingImage}
+                    className="px-4 py-2 bg-purple-600 hover:bg-purple-700 disabled:bg-purple-800 disabled:cursor-not-allowed rounded-lg font-medium transition-colors whitespace-nowrap"
+                  >
+                    {isGeneratingImage ? '⏳ Generating...' : '🎨 Generate'}
+                  </button>
+                </div>
+              </div>
+
+              {/* Manual Image URL */}
+              <div>
+                <label className="block text-sm text-gray-400 mb-2">Or paste image URL</label>
+                <input
+                  type="url"
+                  value={imageUrl}
+                  onChange={(e) => setImageUrl(e.target.value)}
+                  placeholder="https://example.com/image.jpg"
+                  className="w-full bg-gray-700 border border-gray-600 rounded-lg px-4 py-2 text-white placeholder-gray-400 focus:outline-none focus:border-green-500"
+                />
+              </div>
+
+              {/* Image Preview */}
+              {imageUrl && (
+                <div className="mt-4">
+                  <label className="block text-sm text-gray-400 mb-2">Preview</label>
+                  <div className="relative aspect-square max-w-[200px] rounded-lg overflow-hidden bg-gray-700">
+                    <img
+                      src={imageUrl}
+                      alt="Preview"
+                      className="w-full h-full object-cover"
+                      onError={(e) => {
+                        (e.target as HTMLImageElement).style.display = 'none';
+                      }}
+                    />
+                  </div>
+                  <button
+                    onClick={() => setImageUrl('')}
+                    className="mt-2 text-red-400 hover:text-red-300 text-sm"
+                  >
+                    ✕ Remove image
+                  </button>
+                </div>
+              )}
+            </div>
+          </div>
+
+          {/* Right Column - Settings & Actions */}
+          <div className="space-y-6">
+            {/* Platform Selection */}
+            <div className="bg-gray-800 rounded-lg p-6">
+              <h2 className="text-lg font-medium mb-4">📱 Platforms</h2>
+
+              <div className="space-y-3">
+                <label className="flex items-center gap-3 cursor-pointer">
+                  <input
+                    type="checkbox"
+                    checked={platforms.instagram}
+                    onChange={(e) => setPlatforms({ ...platforms, instagram: e.target.checked })}
+                    className="w-5 h-5 rounded border-gray-600 bg-gray-700 text-pink-500 focus:ring-pink-500"
+                  />
+                  <span className="flex items-center gap-2">
+                    <span className="text-2xl">📸</span>
+                    <span>Instagram</span>
+                    <span className="text-xs text-gray-400">(requires image)</span>
+                  </span>
+                </label>
+
+                <label className="flex items-center gap-3 cursor-pointer">
+                  <input
+                    type="checkbox"
+                    checked={platforms.linkedin}
+                    onChange={(e) => setPlatforms({ ...platforms, linkedin: e.target.checked })}
+                    className="w-5 h-5 rounded border-gray-600 bg-gray-700 text-blue-500 focus:ring-blue-500"
+                  />
+                  <span className="flex items-center gap-2">
+                    <span className="text-2xl">💼</span>
+                    <span>LinkedIn</span>
+                    <span className="text-xs text-gray-400">(image optional)</span>
+                  </span>
+                </label>
+              </div>
+            </div>
+
+            {/* Schedule Options */}
+            <div className="bg-gray-800 rounded-lg p-6">
+              <h2 className="text-lg font-medium mb-4">📅 Schedule (Optional)</h2>
+
+              <div className="grid grid-cols-2 gap-4">
+                <div>
+                  <label className="block text-sm text-gray-400 mb-2">Date</label>
+                  <input
+                    type="date"
+                    value={scheduleDate}
+                    onChange={(e) => setScheduleDate(e.target.value)}
+                    className="w-full bg-gray-700 border border-gray-600 rounded-lg px-4 py-2 text-white focus:outline-none focus:border-green-500"
+                  />
+                </div>
+                <div>
+                  <label className="block text-sm text-gray-400 mb-2">Time</label>
+                  <input
+                    type="time"
+                    value={scheduleTime}
+                    onChange={(e) => setScheduleTime(e.target.value)}
+                    className="w-full bg-gray-700 border border-gray-600 rounded-lg px-4 py-2 text-white focus:outline-none focus:border-green-500"
+                  />
+                </div>
+              </div>
+              <p className="text-xs text-gray-400 mt-2">
+                Leave empty to post immediately or schedule for later
+              </p>
+            </div>
+
+            {/* Preview Card */}
+            <div className="bg-gray-800 rounded-lg p-6">
+              <h2 className="text-lg font-medium mb-4">👁️ Preview</h2>
+
+              <div className="bg-gray-700 rounded-lg p-4">
+                {imageUrl && (
+                  <div className="aspect-square max-h-[200px] rounded-lg overflow-hidden mb-3">
+                    <img
+                      src={imageUrl}
+                      alt="Preview"
+                      className="w-full h-full object-cover"
+                    />
+                  </div>
+                )}
+                <p className="text-sm text-gray-300 whitespace-pre-wrap">
+                  {text || 'Your post text will appear here...'}
+                </p>
+                <div className="flex gap-2 mt-3">
+                  {platforms.instagram && (
+                    <span className="px-2 py-1 bg-pink-600/30 text-pink-300 rounded text-xs">Instagram</span>
+                  )}
+                  {platforms.linkedin && (
+                    <span className="px-2 py-1 bg-blue-600/30 text-blue-300 rounded text-xs">LinkedIn</span>
+                  )}
+                </div>
+              </div>
+            </div>
+
+            {/* Action Buttons */}
+            <div className="space-y-3">
+              <button
+                onClick={handlePostNow}
+                disabled={isPosting || !text.trim()}
+                className="w-full py-4 bg-green-600 hover:bg-green-700 disabled:bg-gray-600 disabled:cursor-not-allowed rounded-lg font-semibold text-lg transition-colors flex items-center justify-center gap-2"
+              >
+                {isPosting ? (
+                  <>⏳ Posting...</>
+                ) : (
+                  <>🚀 Post Now</>
+                )}
+              </button>
+
+              <button
+                onClick={handleSchedule}
+                disabled={isScheduling || !text.trim()}
+                className="w-full py-4 bg-blue-600 hover:bg-blue-700 disabled:bg-gray-600 disabled:cursor-not-allowed rounded-lg font-semibold text-lg transition-colors flex items-center justify-center gap-2"
+              >
+                {isScheduling ? (
+                  <>⏳ Scheduling...</>
+                ) : (
+                  <>📅 Schedule for Later</>
+                )}
+              </button>
+            </div>
+
+            {/* Info */}
+            <div className="text-sm text-gray-400 space-y-2">
+              <p>💡 <strong>Post Now:</strong> Immediately posts to selected platforms via Make.com</p>
+              <p>📅 <strong>Schedule:</strong> Saves to queue. Python script will post at scheduled time.</p>
+            </div>
+          </div>
         </div>
-      </div>
+      </main>
     </div>
-  )
+  );
 }
